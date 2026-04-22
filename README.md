@@ -62,7 +62,7 @@ Access from the **Main** panel next to "Rich Text" or from **View > Rich Text St
 - **Documentation:** [dylo-gaming.gitbook.io/documentation](https://dylo-gaming.gitbook.io/documentation/install)
 - **Issues:** [GitHub Issues](https://github.com/dylogaming/Dialogue-Component-Editor/issues)
 - **Support:** dylogamingofficial@gmail.com
-- **Ko-fi:** [ko-fi.com/dylogaming](https://ko-fi.com/dylogaming)
+- **💰 Donations:** [ko-fi.com/dylogaming](https://ko-fi.com/dylogaming)
 
 ## License
 
