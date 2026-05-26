@@ -627,10 +627,10 @@ body.global-mode .g-group-panel .g-chev:hover{background:rgba(224,85,85,0.12);bo
    positioning so it never affects the node's bounding box (packEdges /
    updateNodeHalo depend on a stable bbox). Sibling of .dupe-warn at top
    of the node. Amber to match .resp-notarget-warn visual language. */
-.branch-deadend-warn{display:flex;position:absolute;right:38px;top:6px;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;cursor:default;font-size:15px;color:#1a1408;background:var(--amber);font-weight:900;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.7),0 0 14px rgba(232,160,32,0.85);user-select:none;z-index:12;animation:warn-pulse 1.8s ease-in-out infinite;pointer-events:auto;}
+.branch-deadend-warn{display:flex;position:absolute;left:50%;transform:translateX(-50%);top:-12px;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;cursor:default;font-size:15px;color:#1a1408;background:var(--amber);font-weight:900;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.7),0 0 14px rgba(232,160,32,0.85);user-select:none;z-index:12;animation:warn-pulse 1.8s ease-in-out infinite;pointer-events:auto;}
 .branch-deadend-warn:hover{transform:scale(1.15);}
 .branch-deadend-warn.hidden{display:none;}
-#canvas-wrap.zoom-overview .branch-deadend-warn{width:calc(22px * clamp(1, var(--zoom-inv,1), 3)) !important;height:calc(22px * clamp(1, var(--zoom-inv,1), 3)) !important;font-size:calc(15px * clamp(1, var(--zoom-inv,1), 3)) !important;right:calc(40px * clamp(1, var(--zoom-inv,1), 3)) !important;top:calc(6px * clamp(1, var(--zoom-inv,1), 3)) !important;border-radius:calc(4px * clamp(1, var(--zoom-inv,1), 3)) !important;}
+#canvas-wrap.zoom-overview .branch-deadend-warn{width:calc(22px * clamp(1, var(--zoom-inv,1), 3)) !important;height:calc(22px * clamp(1, var(--zoom-inv,1), 3)) !important;font-size:calc(15px * clamp(1, var(--zoom-inv,1), 3)) !important;top:calc(-12px * clamp(1, var(--zoom-inv,1), 3)) !important;border-radius:calc(4px * clamp(1, var(--zoom-inv,1), 3)) !important;}
 .map-dupekey-warn{position:static;margin-left:6px;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:3px;cursor:pointer;font-size:12px;color:#1a1408;background:var(--amber);font-weight:700;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.4),0 0 12px rgba(232,160,32,0.5);user-select:none;transition:transform 0.1s;z-index:10;flex-shrink:0;}
 .map-dupekey-warn:hover{transform:scale(1.2);}
 .map-dupekey-warn.hidden{display:none;}
@@ -7062,6 +7062,34 @@ async function bridgeInit() {
       if (mb) { mb.textContent = tag; mb.title = (v.friendly_name || 'Plugin') + ' ' + tag; }
       if (hdr) hdr.textContent = tag;
     }
+    // After local version is shown, ping GitHub for the matching engine
+    // branch's .uplugin VersionName. If newer, turn the chip amber and add
+    // a tooltip with details + clickable link to the branch on GitHub.
+    bridgeFetch('/check_update').then(u => {
+      if (!u || !u.ok || !u.update_available) return;
+      const mb = document.getElementById('mb-version');
+      const hdr = document.getElementById('hdr-version');
+      const branchUrl = 'https://github.com/dylogaming/Dialogue-Component-Editor/tree/' + (u.engine_branch || '5.7');
+      const tipBody = 'Update available: v' + u.remote_version
+                    + ' (you have v' + u.local_version + ')\n'
+                    + 'Branch: ' + (u.engine_branch || '?')
+                    + '\nClick to open on GitHub';
+      [mb, hdr].forEach(el => {
+        if (!el) return;
+        el.style.color = 'var(--amber)';
+        el.style.cursor = 'pointer';
+        el.title = tipBody;
+        el.onclick = () => window.open(branchUrl, '_blank');
+        // Add a tiny "!" badge so it's noticeable even without hovering
+        if (!el.querySelector('.upd-dot')) {
+          const dot = document.createElement('span');
+          dot.className = 'upd-dot';
+          dot.textContent = '!';
+          dot.style.cssText = 'display:inline-block;margin-left:4px;background:var(--amber);color:#1a1408;font-weight:900;padding:0 4px;border-radius:3px;font-size:9px;line-height:1.6;';
+          el.appendChild(dot);
+        }
+      });
+    });
   });
   const h = await bridgeFetch('/health');
   setBridgeStatus(!!h.ok, h.ok ? `Bridge @ ${h.bridge}` : 'Bridge offline — run bridge_server.py');
