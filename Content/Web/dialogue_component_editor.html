@@ -783,7 +783,7 @@ body.global-mode .g-group-panel .g-chev:hover{background:rgba(224,85,85,0.12);bo
     <div class="ctx-item" data-dir="v" onclick="setLayoutDir('v');hideTidyMenu();autoLayout();"><span class="td-check">☐</span> <span>Vertical layout</span></div>
   </div>
   <button class="hbtn" onclick="previewDialogue()">Preview</button>
-  <button class="hbtn" onclick="launchEUWFromBrowser(event)" title="Open the legacy Editor Utility Widget tab in Unreal (manual — won't auto-launch on every save)">EUW</button>
+  <button class="hbtn" onclick="launchEUWFromBrowser(event)" title="Open the legacy Editor Utility Widget tab in Unreal (manual, won't auto-launch on every save)">EUW</button>
   <div class="hsep"></div>
   <button class="hbtn" onclick="loadTestData()" style="color:var(--purple);border-color:rgba(167,139,250,0.4);" title="Load sample dialogue for testing">Demo</button>
   <div class="hsep"></div>
@@ -3231,13 +3231,13 @@ function buildNodeHTML(b, el) {
     <div class="port port-in" onclick="onPortInClick(event,${b.id})" onmouseup="if(connectingFrom&&!connectingFrom.reverse)onPortInClick(event,${b.id})" title="Connect here"></div>
     <div class="gnode-head" onmousedown="onNodeDown(event,${b.id})" onmouseup="onNodeUp(event,${b.id})" oncontextmenu="event.preventDefault();event.stopPropagation();showBranchCtxMenu(event,${b.id});return false;">
       <span class="gnode-collapse" onmousedown="event.stopPropagation();event.preventDefault();toggleNodeCollapsed(${b.id})" ondblclick="event.stopPropagation();event.preventDefault()" style="cursor:pointer;color:var(--muted2);font-size:11px;padding:0 4px;" title="Open/close settings">${panelsOpen[b.id] ? '▾' : '▸'}</span>
-      <span class="gnode-tag" style="${tagColor}">${tagText}</span>${b._boundAsStart ? '<span class="gnode-bound-mark" title="Bound as START — renaming this branch auto-updates the global START variable">🔗</span>' : ''}
+      <span class="gnode-tag" style="${tagColor}">${tagText}</span>${b._boundAsStart ? '<span class="gnode-bound-mark" title="Bound as START. Renaming this branch auto-updates the global START variable">🔗</span>' : ''}
       <span class="gnode-branch-name" id="bname-${b.id}" title="${h(b.branchName)} (click or F2 to rename)" onmousedown="event.stopPropagation();event.preventDefault();startRenameBranch(${b.id})">${h(b.branchName)}</span>
       <input type="text" class="gnode-rename" id="brename-${b.id}" value="${h(b.branchName)}" style="display:none;flex:1;background:#0b1628;border:2px solid var(--blue);color:#fff;padding:3px 8px;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;border-radius:4px;outline:none;box-shadow:0 0 0 3px rgba(74,158,255,0.25), 0 0 10px rgba(74,158,255,0.4);" onblur="commitRenameBranch(${b.id})" onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelRenameBranch(${b.id});}" onmousedown="event.stopPropagation()">
       <button class="gnode-del" onclick="event.stopPropagation();deleteBranch(${b.id})" title="Delete">&times;</button>
     </div>
     <span class="dupe-warn" onmouseenter="_showWarnHover(event, _buildDupeNamePop)" onmouseleave="_hideWarnOnLeave()" onclick="showDupeNamePopup(event)" onmousedown="event.stopPropagation()">!</span>
-    <span class="branch-deadend-warn${_branchDeadEnd ? '' : ' hidden'}" title="This branch has no outbound pin — every choice ends the dialogue or has no target. Conversation cannot continue past this node." onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">!</span>
+    <span class="branch-deadend-warn${_branchDeadEnd ? '' : ' hidden'}" title="This choice has no 'to' branch. Dialogue will end here and is set on this branch to avoid getting stuck" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">!</span>
     <div class="gnode-npc">
       <input type="text" class="gnode-speaker-input" placeholder="Speaker Name" value="${h(b.speakerName||'')}"
         onmousedown="event.stopPropagation()"
@@ -3454,7 +3454,7 @@ function renderProp(p, depth, branchId, parentPath) {
       }
       return `<div style="display:flex;gap:3px;align-items:center;padding:2px 4px;">
       <span style="color:var(--muted2);font-size:9px;flex:0 0 26px;">[${idx}]</span>
-      <input type="text" value="${h(entry.key)}" placeholder="Name" oninput="onMapItemChange('${uid}',${idx},'key',this.value)" onmousedown="event.stopPropagation()" style="flex:1;min-width:0;background:var(--surface2);${borderStyle}color:var(--text);padding:2px 5px;font-size:9px;border-radius:3px;" ${isDupe?'title="Duplicate key — maps cannot have multiple entries with the same name"':''}>
+      <input type="text" value="${h(entry.key)}" placeholder="Name" oninput="onMapItemChange('${uid}',${idx},'key',this.value)" onmousedown="event.stopPropagation()" style="flex:1;min-width:0;background:var(--surface2);${borderStyle}color:var(--text);padding:2px 5px;font-size:9px;border-radius:3px;" ${isDupe?'title="Duplicate key. Maps cannot have multiple entries with the same name"':''}>
       <input type="number" value="${h(String(entry.value||'0'))}" step="1" oninput="onMapItemChange('${uid}',${idx},'value',this.value)" onmousedown="event.stopPropagation()" style="flex:0 0 60px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:2px 5px;font-size:9px;border-radius:3px;">
       <button class="ge-btn ge-btn-red" onclick="onMapItemRemove('${uid}',${idx})" onmousedown="event.stopPropagation()" style="padding:1px 5px;">×</button>
     </div>`;
@@ -3500,11 +3500,11 @@ function renderProp(p, depth, branchId, parentPath) {
                id="${wid}_${r.prop.name.toLowerCase()}"
                oninput="onColorChannelEdit('${wid}','${r.uid}',parseFloat(this.value)||0)"
                onfocus="this.select()" onmousedown="event.stopPropagation()"
-               style="width:46px;min-width:0;" title="${h(r.prop.name)} (0–1 linear)">`).join('');
+               style="width:46px;min-width:0;" title="${h(r.prop.name)} (0 to 1 linear)">`).join('');
       return `<div class="gprop" data-property-path="${h(propPath)}" data-widget="struct">
         <span class="gprop-name" style="padding-left:${indent}px;">${h(p.name)}</span>
         <div class="gprop-edit" style="display:flex;gap:4px;align-items:center;">
-          <input type="color" id="${wid}" data-uids="${h(refs.map(r=>r.uid).join(','))}" value="${hex}" oninput="onColorSwatchPreview('${wid}')" onchange="onColorSwatchEdit('${wid}')" onmousedown="event.stopPropagation()" style="width:28px;height:20px;padding:0;border:1px solid var(--border);border-radius:3px;flex:0 0 auto;cursor:pointer;" title="Click to pick — updates when the picker closes">
+          <input type="color" id="${wid}" data-uids="${h(refs.map(r=>r.uid).join(','))}" value="${hex}" oninput="onColorSwatchPreview('${wid}')" onchange="onColorSwatchEdit('${wid}')" onmousedown="event.stopPropagation()" style="width:28px;height:20px;padding:0;border:1px solid var(--border);border-radius:3px;flex:0 0 auto;cursor:pointer;" title="Click to pick. Updates when the picker closes">
           ${numFields}
         </div>
       </div>`;
@@ -3607,7 +3607,7 @@ function renderProp(p, depth, branchId, parentPath) {
         hi ? `background:rgba(74,158,255,0.10)` : '',
       ].filter(Boolean).join(';');
       const mark = hi ? '🎥 ' : '';
-      return `<option value="${h(a.path)}" ${sel} title="${h(a.path)}${hi?' — has camera':''}"${style?` style="${style}"`:''}>${mark}${h(a.label)} (${h(a.class)})</option>`;
+      return `<option value="${h(a.path)}" ${sel} title="${h(a.path)}${hi?', has camera':''}"${style?` style="${style}"`:''}>${mark}${h(a.label)} (${h(a.class)})</option>`;
     }).join('');
     editCtrl = `<div class="gprop-edit"><select onchange="onPropEdit('${uid}',this.value)" onmousedown="event.stopPropagation()">${opts}</select></div>`;
     return `<div class="gprop" data-property-path="${h(propPath)}"><span class="gprop-name" style="padding-left:${indent}px;" title="${h(p.name)}">${h(p.name)}</span>${editCtrl}</div>`;
@@ -3840,7 +3840,7 @@ function renderProp(p, depth, branchId, parentPath) {
       const borderStyle = isDupe ? 'border:1px solid var(--red);box-shadow:0 0 6px rgba(224,85,85,0.5);' : 'border:1px solid var(--border);';
       return `<div style="display:flex;gap:3px;align-items:center;padding:2px 4px;">
       <span style="color:var(--muted2);font-size:9px;flex:0 0 26px;">[${idx}]</span>
-      <input type="text" value="${h(entry.key)}" placeholder="Name" oninput="onMapItemChange('${uid}',${idx},'key',this.value)" onmousedown="event.stopPropagation()" style="flex:1;min-width:0;background:var(--surface2);${borderStyle}color:var(--text);padding:2px 5px;font-size:9px;border-radius:3px;" ${isDupe?'title="Duplicate key — maps cannot have multiple entries with the same name"':''}>
+      <input type="text" value="${h(entry.key)}" placeholder="Name" oninput="onMapItemChange('${uid}',${idx},'key',this.value)" onmousedown="event.stopPropagation()" style="flex:1;min-width:0;background:var(--surface2);${borderStyle}color:var(--text);padding:2px 5px;font-size:9px;border-radius:3px;" ${isDupe?'title="Duplicate key. Maps cannot have multiple entries with the same name"':''}>
       ${isOverlap ? '' : `<input type="number" value="${h(String(entry.value||'0'))}" step="1" oninput="onMapItemChange('${uid}',${idx},'value',this.value)" onmousedown="event.stopPropagation()" style="flex:0 0 60px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:2px 5px;font-size:9px;border-radius:3px;">`}
       <button class="ge-btn ge-btn-red" onclick="onMapItemRemove('${uid}',${idx})" onmousedown="event.stopPropagation()" style="padding:1px 5px;">×</button>
     </div>`;
@@ -6499,7 +6499,7 @@ function renderOutlinerHeader() {
     const clickAttr = def.sortable
       ? ` onclick="outlinerSort('${key}')"`
       : (def.toggle === 'dcOnly' ? ` onclick="toggleOutlinerDcOnly()"` : '');
-    const titleAttr = def.title ? ` title="${def.title}${def.toggle==='dcOnly' && _outlinerDcOnly ? ' (active — showing DC actors only)' : ''}"` : '';
+    const titleAttr = def.title ? ` title="${def.title}${def.toggle==='dcOnly' && _outlinerDcOnly ? ' (active, showing DC actors only)' : ''}"` : '';
     html += `<div class="col col-${key}${active}" data-col="${key}" draggable="true"${clickAttr}${titleAttr}>${def.label}<span class="col-sortmark">${sortMark}</span></div>`;
   });
   colsEl.innerHTML = html;

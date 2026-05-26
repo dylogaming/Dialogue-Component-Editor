@@ -15,7 +15,7 @@ private:
 	void RegisterToolbarButton();
 	void PopulateOptionsMenu(class UToolMenu* Menu);
 	void OnButtonClicked();
-	void MaybeLaunchEUW();
+	void LaunchEUW();
 
 	/** Handle to the bridge-server subprocess. Null when not running. */
 	FProcHandle ServerProcess;
