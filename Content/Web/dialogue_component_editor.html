@@ -622,6 +622,15 @@ body.global-mode .g-group-panel .g-chev:hover{background:rgba(224,85,85,0.12);bo
 .resp-notarget-warn{position:absolute;right:-34px;top:6px;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:3px;cursor:pointer;font-size:12px;color:#1a1408;background:var(--amber);font-weight:700;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.4),0 0 12px rgba(232,160,32,0.5);user-select:none;transition:transform 0.1s;z-index:10;}
 .resp-notarget-warn:hover{transform:scale(1.2);}
 .resp-notarget-warn.hidden{display:none;}
+/* Per-branch dead-end warning — appears when the branch has zero responses
+   or every response is endDialogue / empty branchSelection. Uses absolute
+   positioning so it never affects the node's bounding box (packEdges /
+   updateNodeHalo depend on a stable bbox). Sibling of .dupe-warn at top
+   of the node. Amber to match .resp-notarget-warn visual language. */
+.branch-deadend-warn{display:flex;position:absolute;right:38px;top:6px;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;cursor:default;font-size:15px;color:#1a1408;background:var(--amber);font-weight:900;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.7),0 0 14px rgba(232,160,32,0.85);user-select:none;z-index:12;animation:warn-pulse 1.8s ease-in-out infinite;pointer-events:auto;}
+.branch-deadend-warn:hover{transform:scale(1.15);}
+.branch-deadend-warn.hidden{display:none;}
+#canvas-wrap.zoom-overview .branch-deadend-warn{width:calc(22px * clamp(1, var(--zoom-inv,1), 3)) !important;height:calc(22px * clamp(1, var(--zoom-inv,1), 3)) !important;font-size:calc(15px * clamp(1, var(--zoom-inv,1), 3)) !important;right:calc(40px * clamp(1, var(--zoom-inv,1), 3)) !important;top:calc(6px * clamp(1, var(--zoom-inv,1), 3)) !important;border-radius:calc(4px * clamp(1, var(--zoom-inv,1), 3)) !important;}
 .map-dupekey-warn{position:static;margin-left:6px;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:3px;cursor:pointer;font-size:12px;color:#1a1408;background:var(--amber);font-weight:700;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.4),0 0 12px rgba(232,160,32,0.5);user-select:none;transition:transform 0.1s;z-index:10;flex-shrink:0;}
 .map-dupekey-warn:hover{transform:scale(1.2);}
 .map-dupekey-warn.hidden{display:none;}
@@ -754,14 +763,14 @@ body.global-mode .g-group-panel .g-chev:hover{background:rgba(224,85,85,0.12);bo
   <span class="mb-item" onclick="toggleMenuDropdown(event,'view')" onmouseenter="if(_menuBarDropdownOpen)toggleMenuDropdown(event,'view')">View</span>
   <span class="mb-item" onclick="toggleMenuDropdown(event,'help')" onmouseenter="if(_menuBarDropdownOpen)toggleMenuDropdown(event,'help')">Help</span>
   <span style="flex:1;"></span>
-  <span id="mb-version" style="color:var(--muted2);font-size:10px;letter-spacing:0.5px;user-select:none;cursor:default;" title="Dialogue Component Editor version">v0.002</span>
+  <span id="mb-version" style="color:var(--muted2);font-size:10px;letter-spacing:0.5px;user-select:none;cursor:default;" title="Dialogue Component Editor version">v...</span>
   <span style="flex:1;"></span>
   <span class="mb-right">
     <span id="mb-project-label" style="color:var(--muted);font-size:10px;letter-spacing:0.3px;"></span>
   </span>
 </div>
 <header>
-  <h1>UE Dialogue Editor<span>v2.0</span></h1>
+  <h1>UE Dialogue Editor<span id="hdr-version">v...</span></h1>
   <div class="hdot" id="bridge-dot" title="Bridge server status" style="margin-left:4px;"></div>
   <div class="hsep"></div>
   <button class="hbtn hbtn-primary" onclick="openExportModal()">Export</button>
@@ -774,6 +783,7 @@ body.global-mode .g-group-panel .g-chev:hover{background:rgba(224,85,85,0.12);bo
     <div class="ctx-item" data-dir="v" onclick="setLayoutDir('v');hideTidyMenu();autoLayout();"><span class="td-check">☐</span> <span>Vertical layout</span></div>
   </div>
   <button class="hbtn" onclick="previewDialogue()">Preview</button>
+  <button class="hbtn" onclick="launchEUWFromBrowser(event)" title="Open the legacy Editor Utility Widget tab in Unreal (manual — won't auto-launch on every save)">EUW</button>
   <div class="hsep"></div>
   <button class="hbtn" onclick="loadTestData()" style="color:var(--purple);border-color:rgba(167,139,250,0.4);" title="Load sample dialogue for testing">Demo</button>
   <div class="hsep"></div>
@@ -3209,6 +3219,12 @@ function buildNodeHTML(b, el) {
   let editHTML = '';
   if (isEdit) editHTML = buildEditHTML(b);
 
+  // Branch is a "dead end" when it has zero outbound pins — i.e. no responses,
+  // or every response either ends dialogue or has empty branchSelection.
+  // Render-layer only: a warning pill appears in the top-right; the data model
+  // is not mutated. Pure addition — node bbox is unaffected (absolute pos).
+  const _branchDeadEnd = (b.playerResponses||[]).length === 0 || (b.playerResponses||[]).every(r => r.endDialogue || !((r.branchSelection||'').trim()));
+
   el.innerHTML = `
     <div class="gnode-halo"></div>
     ${isStart ? '<div class="gnode-start-halo"></div><div class="gnode-start-label">Start</div>' : ''}
@@ -3221,6 +3237,7 @@ function buildNodeHTML(b, el) {
       <button class="gnode-del" onclick="event.stopPropagation();deleteBranch(${b.id})" title="Delete">&times;</button>
     </div>
     <span class="dupe-warn" onmouseenter="_showWarnHover(event, _buildDupeNamePop)" onmouseleave="_hideWarnOnLeave()" onclick="showDupeNamePopup(event)" onmousedown="event.stopPropagation()">!</span>
+    <span class="branch-deadend-warn${_branchDeadEnd ? '' : ' hidden'}" title="This branch has no outbound pin — every choice ends the dialogue or has no target. Conversation cannot continue past this node." onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">!</span>
     <div class="gnode-npc">
       <input type="text" class="gnode-speaker-input" placeholder="Speaker Name" value="${h(b.speakerName||'')}"
         onmousedown="event.stopPropagation()"
@@ -4620,6 +4637,11 @@ function commitRenameBranch(id){
   if(span){span.style.display='';span.textContent=branches.find(b=>b.id===id)?.branchName||'';}
   if(inp)inp.style.display='none';
   _markDuplicateNames();
+  // Re-render every node so choice dropdowns on OTHER branches that
+  // referenced the old name pick up the new label immediately. The cascade
+  // in updateField mutates the data, but the DOM still holds the old <option>
+  // text until we re-render.
+  if (typeof renderAll === 'function') renderAll();
 }
 function cancelRenameBranch(id){
   _renamingBranch=null;
@@ -4772,6 +4794,13 @@ function onPortOutDblClick(e,nodeId,respIdx){
     setStatus('That choice already targets a branch.'); return;
   }
   const fromB = branches.find(b => b.id === nodeId); if (!fromB) return;
+  // Belt-and-suspenders: self-loops and edge cases sometimes don't materialize
+  // a `connections` entry, but `branchSelection` is still set on the response.
+  // If the response already points somewhere (including itself), keep it.
+  const _respHere = (fromB.playerResponses || [])[respIdx];
+  if (_respHere && (_respHere.branchSelection || '').trim()) {
+    setStatus('That choice already targets a branch.'); return;
+  }
   pushHistory();
   // Compute full footprint (node body + any open settings panels) in world
   // coords, so the new branch lands clear of panels instead of behind them.
@@ -4984,10 +5013,25 @@ function _updateRespTargetWarning(nodeId, respIdx) {
   if (!rowEl) return;
   rowEl.querySelectorAll('.resp-notarget-warn').forEach(el => el.classList.toggle('hidden', !noTarget));
   rowEl.classList.toggle('resp-warn-pulse', noTarget);
+  // After updating the per-choice warning, the branch-level dead-end state
+  // may have flipped too — re-evaluate it so the branch warning stays in sync.
+  _updateBranchDeadEndWarning(nodeId);
+}
+// Recompute whether the branch has any outbound pin and toggle the
+// .branch-deadend-warn span accordingly. Pure render-layer mutation —
+// node bbox is untouched (warn is position:absolute).
+function _updateBranchDeadEndWarning(nodeId) {
+  const b = branches.find(b => b.id === nodeId); if (!b) return;
+  const deadEnd = (b.playerResponses||[]).length === 0 || (b.playerResponses||[]).every(r => r.endDialogue || !((r.branchSelection||'').trim()));
+  const nodeEl = document.getElementById('gn-' + b.id);
+  if (!nodeEl) return;
+  const warn = nodeEl.querySelector(':scope > .branch-deadend-warn');
+  if (warn) warn.classList.toggle('hidden', !deadEnd);
 }
 function _updateAllRespTargetWarnings() {
   for (const b of branches) {
     for (let i = 0; i < (b.playerResponses || []).length; i++) _updateRespTargetWarning(b.id, i);
+    _updateBranchDeadEndWarning(b.id);
   }
 }
 
@@ -6915,6 +6959,24 @@ async function bridgeFetch(path, opts={}) {
   } catch (e) { return { ok: false, error: String(e) }; }
 }
 
+// Manual EUW launch from the editor header button. Distinct from the legacy
+// auto-respawn fallback (which we removed) — this only fires on click.
+async function launchEUWFromBrowser(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  if (!_bridgeOnline) {
+    if (typeof setStatus === 'function') setStatus('Bridge offline — start UE first');
+    return;
+  }
+  if (typeof setStatus === 'function') setStatus('Opening EUW in Unreal...');
+  const r = await bridgeFetch('/launch_euw');
+  if (r && r.ok) {
+    if (typeof setStatus === 'function') setStatus('EUW opened: ' + (r.asset || ''));
+  } else {
+    const msg = (r && r.error) || 'unknown error';
+    if (typeof setStatus === 'function') setStatus('EUW failed: ' + msg);
+  }
+}
+
 function setBridgeStatus(online, msg) {
   _bridgeOnline = online;
   _updateBridgeDot(msg);
@@ -6990,6 +7052,17 @@ async function bridgeInit() {
   // stay empty and no row lights up.
   _outlinerSelected = '';
   _ownerActor = '';
+  // Read plugin version from the bundled .uplugin. Runs before /health so the
+  // version chip flips from "v..." even when UE isn't yet online.
+  bridgeFetch('/version').then(v => {
+    if (v && v.ok && v.version) {
+      const tag = 'v' + v.version;
+      const mb = document.getElementById('mb-version');
+      const hdr = document.getElementById('hdr-version');
+      if (mb) { mb.textContent = tag; mb.title = (v.friendly_name || 'Plugin') + ' ' + tag; }
+      if (hdr) hdr.textContent = tag;
+    }
+  });
   const h = await bridgeFetch('/health');
   setBridgeStatus(!!h.ok, h.ok ? `Bridge @ ${h.bridge}` : 'Bridge offline — run bridge_server.py');
   if (h.ok) {
@@ -8967,6 +9040,114 @@ let _gSubobjCollapsed = {};
 try { const s = localStorage.getItem('ue_dia_gsubobj'); if (s) _gSubobjCollapsed = JSON.parse(s) || {}; } catch(e){}
 function _saveGPanelScroll() { try { localStorage.setItem('ue_dia_gpanel_scroll', JSON.stringify(_gPanelScroll)); } catch(e){} }
 function _saveGSubobjCollapsed() { try { localStorage.setItem('ue_dia_gsubobj', JSON.stringify(_gSubobjCollapsed)); } catch(e){} }
+// Per-panel category drag-order persistence. Shape: { "<panelTitle>": ["catA","catB",...] }.
+// UI-only — not pushed to UE. Applied post-render in renderGlobalPanel by
+// _applyCatOrderAndWireDrag() which re-sorts `.subobj-wrapper` children of
+// `.gsec-body` and wires drag handlers on the header divs.
+let _gCatOrder = {};
+try { const s = localStorage.getItem('ue_dia_gcat_order'); if (s) _gCatOrder = JSON.parse(s) || {}; } catch(e){}
+function _saveGCatOrder() { try { localStorage.setItem('ue_dia_gcat_order', JSON.stringify(_gCatOrder)); } catch(e){} }
+function _applyCatOrderAndWireDrag(panelDiv, panelTitle) {
+  const body = panelDiv.querySelector('.gsec-body'); if (!body) return;
+  const wrappers = Array.from(body.querySelectorAll(':scope > .subobj-wrapper'));
+  if (!wrappers.length) return;
+  // Apply persisted order: re-sort wrappers to match _gCatOrder[panelTitle].
+  // Unknown (new) categories keep their original relative order at the end.
+  const saved = (_gCatOrder[panelTitle] || []).slice();
+  if (saved.length) {
+    const byName = new Map();
+    for (const w of wrappers) byName.set(w.dataset.catName || '', w);
+    const placed = new Set();
+    const sorted = [];
+    for (const nm of saved) {
+      if (byName.has(nm) && !placed.has(nm)) { sorted.push(byName.get(nm)); placed.add(nm); }
+    }
+    for (const w of wrappers) {
+      const nm = w.dataset.catName || '';
+      if (!placed.has(nm)) sorted.push(w);
+    }
+    // Re-insert in sorted order. appendChild on an existing child moves it.
+    for (const w of sorted) body.appendChild(w);
+  }
+  // Wire drag handlers. The header (first child div) is the drag handle so
+  // inputs/selects inside the body remain interactive. Use a dedicated
+  // dataTransfer key 'text/cat' to avoid colliding with outliner column drag.
+  const liveWrappers = Array.from(body.querySelectorAll(':scope > .subobj-wrapper'));
+  for (const w of liveWrappers) {
+    const header = w.firstElementChild;
+    if (!header) continue;
+    header.setAttribute('draggable', 'true');
+    if (!header.style.cursor) header.style.cursor = 'grab';
+    header.addEventListener('dragstart', (e) => {
+      const catName = w.dataset.catName || '';
+      if (!catName) { e.preventDefault(); return; }
+      e.stopPropagation();
+      try { e.dataTransfer.effectAllowed = 'move'; } catch(_) {}
+      try { e.dataTransfer.setData('text/cat', catName); } catch(_) {}
+      try { e.dataTransfer.setData('text/cat-panel', panelTitle); } catch(_) {}
+      w.classList.add('cat-dragging');
+    });
+    header.addEventListener('dragend', () => {
+      w.classList.remove('cat-dragging');
+    });
+    w.addEventListener('dragover', (e) => {
+      // Only respond to category drags from the same panel — never bubble
+      // into outliner column drag handling (which uses 'text/col').
+      const types = e.dataTransfer && e.dataTransfer.types ? [...e.dataTransfer.types] : [];
+      if (!types.includes('text/cat')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try { e.dataTransfer.dropEffect = 'move'; } catch(_) {}
+    });
+    w.addEventListener('drop', (e) => {
+      const types = e.dataTransfer && e.dataTransfer.types ? [...e.dataTransfer.types] : [];
+      if (!types.includes('text/cat')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const srcName = e.dataTransfer.getData('text/cat');
+      const srcPanel = e.dataTransfer.getData('text/cat-panel');
+      if (!srcName || srcPanel !== panelTitle) return;
+      const dstName = w.dataset.catName || '';
+      if (!dstName || srcName === dstName) return;
+      // Reorder rule (matches outliner column drag at line 6510): drop on a
+      // target means "src takes target's slot, target shifts toward where src
+      // came from". So if src was BEFORE dst, src lands just AFTER dst; if
+      // src was AFTER dst, src lands just BEFORE dst.
+      const cur = Array.from(body.querySelectorAll(':scope > .subobj-wrapper'))
+        .map(x => x.dataset.catName || '');
+      const srcIdx0 = cur.indexOf(srcName);
+      const dstIdx0 = cur.indexOf(dstName);
+      if (srcIdx0 < 0 || dstIdx0 < 0) return;
+      const without = cur.filter(n => n !== srcName);
+      // After removing src, dst sits at dstIdx0 (if src was after dst) or
+      // dstIdx0-1 (if src was before dst). We want src to LAND at the
+      // original dst slot, which means inserting at index dstIdx0 in the
+      // original list. Translate that to an index in `without`:
+      //   - src before dst → insert at (dstIdx0 - 1) + 1 = dstIdx0 in without? No:
+      //   - Concretely: cur=[A,B,C], src=A(0), dst=B(1). Without=[B,C].
+      //     We want result [B,A,C] — i.e. insert A at index 1 in without.
+      //   - cur=[A,B,C], src=C(2), dst=B(1). Without=[A,B]. Want [A,C,B] —
+      //     insert C at index 1 in without.
+      // So in both cases: insert at the index where dst CURRENTLY sits in
+      // `without` (without.indexOf(dst)), shifted by +1 when src was before dst.
+      let insertIdx = without.indexOf(dstName);
+      if (srcIdx0 < dstIdx0) insertIdx += 1;
+      without.splice(insertIdx, 0, srcName);
+      _gCatOrder[panelTitle] = without;
+      _saveGCatOrder();
+      // Apply the new order to the DOM immediately (no re-render needed —
+      // category reorder is UI-only).
+      const byName2 = new Map();
+      for (const x of body.querySelectorAll(':scope > .subobj-wrapper')) {
+        byName2.set(x.dataset.catName || '', x);
+      }
+      for (const nm of without) {
+        const node = byName2.get(nm);
+        if (node) body.appendChild(node);
+      }
+    });
+  }
+}
 // Build + maintain sticky chip strips of category headers for panel scroll navigation.
 function _bindPanelCatNav(panelDiv) {
   const body = panelDiv.querySelector('.gsec-body'); if (!body) return;
@@ -9401,6 +9582,8 @@ function renderGlobalPanel() {
         if (arrow) arrow.textContent = '▸';
       }
     });
+    // Apply persisted category drag-order + wire drag handlers on headers.
+    _applyCatOrderAndWireDrag(div, g.title);
     // Restore + persist the scroll position so it survives toggles AND reloads.
     const body = div.querySelector('.gsec-body');
     if (body) {
@@ -9467,6 +9650,34 @@ document.addEventListener('keydown', e => {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     e.preventDefault();
     toggleGlobalMode();
+  }
+});
+
+// Alt+P = toggle PIE in UE via the bridge (start if stopped, stop if playing).
+// Mirrors UE's stock Alt+P keybind but works from the browser window.
+document.addEventListener('keydown', e => {
+  if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+    const t = e.target; const tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    e.preventDefault();
+    if (!_bridgeOnline) { showToast('Bridge offline'); return; }
+    const code =
+      "import unreal\n" +
+      "les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)\n" +
+      "playing = False\n" +
+      "try: playing = bool(les.is_in_play_in_editor())\n" +
+      "except Exception: pass\n" +
+      "if playing:\n" +
+      "    les.editor_request_end_play()\n" +
+      "    _result = {'ok': True, 'action': 'stop'}\n" +
+      "else:\n" +
+      "    unreal.DCEditorLibrary.start_pie()\n" +
+      "    _result = {'ok': True, 'action': 'start'}\n";
+    bridgeFetch('/py', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code}) })
+      .then(res => {
+        if (!res || !res.ok) showToast('PIE toggle failed: ' + ((res && res.error) || 'unknown'));
+        else if (res.action) showToast(res.action === 'stop' ? 'Stopped PIE' : 'Started PIE');
+      });
   }
 });
 
@@ -9656,6 +9867,62 @@ setInterval(() => { if (!document.hidden) bridgeFetch('/health').then(h => setBr
   });
 })();
 
+// TEST HOOK (remove after task deadend-warn passes)
+(function() {
+  if (!location.search.includes('test=deadend-warn')) return;
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      try {
+        // Build a fresh branch with the default empty response (deadend=true).
+        addBranchAt(200, 200);
+        var b = branches[branches.length - 1];
+        if (!b) { console.log('[TEST:deadend-warn] fail step=create-branch'); return; }
+        // Force the response into the "no target, not end" state (default
+        // addBranchAt produces this, but be explicit so test is robust).
+        b.playerResponses = b.playerResponses || [];
+        if (b.playerResponses.length === 0) {
+          b.playerResponses.push({ text:'', branchSelection:'', skipToBranch:'', endDialogue:false, disableInteraction:false, npcRotation:'None', props:[] });
+        } else {
+          b.playerResponses[0].branchSelection = '';
+          b.playerResponses[0].endDialogue = false;
+        }
+        renderAll();
+        // STEP 1: empty branchSelection + endDialogue=false -> dead end visible
+        var node1 = document.getElementById('gn-' + b.id);
+        if (!node1) { console.log('[TEST:deadend-warn] fail step=node-missing-1'); return; }
+        var warn1 = node1.querySelector(':scope > .branch-deadend-warn');
+        if (!warn1) { console.log('[TEST:deadend-warn] fail step=warn-not-rendered'); return; }
+        if (warn1.classList.contains('hidden')) {
+          console.log('[TEST:deadend-warn] fail step=1-empty-resp expected=visible got=hidden');
+          return;
+        }
+        // STEP 2: set a real branchSelection -> warn should hide
+        b.playerResponses[0].branchSelection = 'Foo';
+        b.playerResponses[0].endDialogue = false;
+        _updateBranchDeadEndWarning(b.id);
+        var warn2 = document.getElementById('gn-' + b.id).querySelector(':scope > .branch-deadend-warn');
+        if (!warn2.classList.contains('hidden')) {
+          console.log('[TEST:deadend-warn] fail step=2-with-target expected=hidden got=visible');
+          return;
+        }
+        // STEP 3: toggle endDialogue on AND keep branchSelection. With our
+        // spec (endDialogue || empty branchSelection counts as dead), this
+        // single response becomes a dead-end response -> warn visible again.
+        b.playerResponses[0].endDialogue = true;
+        _updateBranchDeadEndWarning(b.id);
+        var warn3 = document.getElementById('gn-' + b.id).querySelector(':scope > .branch-deadend-warn');
+        if (warn3.classList.contains('hidden')) {
+          console.log('[TEST:deadend-warn] fail step=3-end-toggle expected=visible got=hidden');
+          return;
+        }
+        console.log('[TEST:deadend-warn] pass');
+      } catch (e) {
+        console.log('[TEST:deadend-warn] fail step=exception reason=' + e.message);
+      }
+    }, 2000);
+  });
+})();
+
 // TEST HOOK (remove after task popup-reposition passes)
 (function() {
   if (!location.search.includes('test=popup-reposition')) return;
@@ -9689,6 +9956,161 @@ setInterval(() => { if (!document.hidden) bridgeFetch('/health').then(h => setBr
         console.log('[TEST:popup-reposition] fail reason=' + e.message);
       }
     }, 1500);
+  });
+})();
+
+// TEST HOOK (remove after task cat-drag passes) — verifies that the
+// Main panel's category headers (.subobj-wrapper) can be reordered via
+// synthetic drag events AND that the new order is persisted to _gCatOrder
+// in localStorage.
+(function() {
+  if (!location.search.includes('test=cat-drag')) return;
+  function findPanelBody(title) {
+    const panels = document.querySelectorAll('.g-group-panel');
+    for (const p of panels) {
+      const t = p.querySelector('.g-group-title > span:last-child');
+      if (t && t.textContent.trim() === title) return p.querySelector('.gsec-body');
+    }
+    return null;
+  }
+  function waitForCats(title, minCount, timeoutMs) {
+    return new Promise((resolve) => {
+      const t0 = Date.now();
+      (function poll() {
+        const body = findPanelBody(title);
+        if (body) {
+          const cats = body.querySelectorAll(':scope > .subobj-wrapper');
+          if (cats.length >= minCount) return resolve(Array.from(cats));
+        }
+        if (Date.now() - t0 > timeoutMs) return resolve(null);
+        setTimeout(poll, 200);
+      })();
+    });
+  }
+  window.addEventListener('load', async function() {
+    // Clear any pre-existing saved order for Main so this test sees the
+    // natural render order baseline.
+    try {
+      const saved = JSON.parse(localStorage.getItem('ue_dia_gcat_order') || '{}');
+      delete saved.Main;
+      localStorage.setItem('ue_dia_gcat_order', JSON.stringify(saved));
+      if (typeof _gCatOrder !== 'undefined') delete _gCatOrder.Main;
+    } catch(_) {}
+    try { if (typeof renderGlobalPanel === 'function') renderGlobalPanel(); } catch(_) {}
+    const cats = await waitForCats('Main', 2, 8000);
+    if (!cats) {
+      console.warn('[TEST:cat-drag] fail reason=panel-or-cats-not-found');
+      return;
+    }
+    const first = cats[0], second = cats[1];
+    const firstName = first.dataset.catName || '';
+    const secondName = second.dataset.catName || '';
+    if (!firstName || !secondName) {
+      console.warn('[TEST:cat-drag] fail reason=missing-cat-names first=' + firstName + ' second=' + secondName);
+      return;
+    }
+    const beforeOrder = Array.from(first.parentNode.querySelectorAll(':scope > .subobj-wrapper'))
+      .map(w => w.dataset.catName || '');
+    // Build a real DataTransfer to carry the cat key across synthetic events.
+    let dt;
+    try { dt = new DataTransfer(); } catch(_) { dt = null; }
+    if (dt) {
+      try { dt.setData('text/cat', firstName); } catch(_) {}
+      try { dt.setData('text/cat-panel', 'Main'); } catch(_) {}
+    }
+    const fire = (target, type) => {
+      const ev = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt });
+      target.dispatchEvent(ev);
+    };
+    fire(first.firstElementChild, 'dragstart');
+    fire(second, 'dragover');
+    fire(second, 'drop');
+    fire(first.firstElementChild, 'dragend');
+    const afterOrder = Array.from(first.parentNode.querySelectorAll(':scope > .subobj-wrapper'))
+      .map(w => w.dataset.catName || '');
+    const swapped = afterOrder[0] === secondName && afterOrder[1] === firstName;
+    let stored = null;
+    try { stored = JSON.parse(localStorage.getItem('ue_dia_gcat_order') || '{}').Main || null; } catch(_) {}
+    const storedOk = Array.isArray(stored) && stored[0] === secondName && stored[1] === firstName;
+    if (swapped && storedOk) {
+      console.warn('[TEST:cat-drag] pass before=' + JSON.stringify(beforeOrder.slice(0,2)) + ' after=' + JSON.stringify(afterOrder.slice(0,2)));
+    } else {
+      console.warn('[TEST:cat-drag] fail reason=swapped=' + swapped + ' storedOk=' + storedOk + ' before=' + JSON.stringify(beforeOrder.slice(0,2)) + ' after=' + JSON.stringify(afterOrder.slice(0,2)) + ' stored=' + JSON.stringify(stored));
+    }
+  });
+})();
+
+// TEST HOOK (remove after task cat-persist passes) — verifies that a
+// persisted _gCatOrder is honored by renderGlobalPanel(). Uses an in-page
+// render cycle per the task brief's escape hatch (avoiding the reload
+// race against bridge/global-vars hydration).
+(function() {
+  if (!location.search.includes('test=cat-persist')) return;
+  function findPanelBody(title) {
+    const panels = document.querySelectorAll('.g-group-panel');
+    for (const p of panels) {
+      const t = p.querySelector('.g-group-title > span:last-child');
+      if (t && t.textContent.trim() === title) return p.querySelector('.gsec-body');
+    }
+    return null;
+  }
+  function waitForCats(title, minCount, timeoutMs) {
+    return new Promise((resolve) => {
+      const t0 = Date.now();
+      (function poll() {
+        const body = findPanelBody(title);
+        if (body) {
+          const cats = body.querySelectorAll(':scope > .subobj-wrapper');
+          if (cats.length >= minCount) return resolve(Array.from(cats));
+        }
+        if (Date.now() - t0 > timeoutMs) return resolve(null);
+        setTimeout(poll, 200);
+      })();
+    });
+  }
+  window.addEventListener('load', async function() {
+    // Clean baseline so we know the natural render order.
+    try {
+      const saved = JSON.parse(localStorage.getItem('ue_dia_gcat_order') || '{}');
+      delete saved.Main;
+      localStorage.setItem('ue_dia_gcat_order', JSON.stringify(saved));
+      if (typeof _gCatOrder !== 'undefined') delete _gCatOrder.Main;
+    } catch(_) {}
+    try { if (typeof renderGlobalPanel === 'function') renderGlobalPanel(); } catch(_) {}
+    const cats = await waitForCats('Main', 2, 8000);
+    if (!cats) {
+      console.warn('[TEST:cat-persist] fail reason=panel-or-cats-not-found');
+      return;
+    }
+    const naturalOrder = cats.map(w => w.dataset.catName || '');
+    const firstName = naturalOrder[0];
+    const secondName = naturalOrder[1];
+    const swapped = [secondName, firstName].concat(naturalOrder.slice(2));
+    try {
+      const saved = JSON.parse(localStorage.getItem('ue_dia_gcat_order') || '{}');
+      saved.Main = swapped;
+      localStorage.setItem('ue_dia_gcat_order', JSON.stringify(saved));
+      if (typeof _gCatOrder !== 'undefined') _gCatOrder.Main = swapped.slice();
+    } catch(e) {
+      console.warn('[TEST:cat-persist] fail reason=storage-write-failed: ' + e.message);
+      return;
+    }
+    try { renderGlobalPanel(); } catch(e) {
+      console.warn('[TEST:cat-persist] fail reason=render-threw: ' + e.message);
+      return;
+    }
+    const afterCats = await waitForCats('Main', 2, 4000);
+    if (!afterCats) {
+      console.warn('[TEST:cat-persist] fail reason=post-render-no-cats');
+      return;
+    }
+    const afterOrder = afterCats.map(w => w.dataset.catName || '');
+    const ok = afterOrder[0] === secondName && afterOrder[1] === firstName;
+    if (ok) {
+      console.warn('[TEST:cat-persist] pass natural=' + JSON.stringify(naturalOrder.slice(0,2)) + ' persisted=' + JSON.stringify(swapped.slice(0,2)) + ' applied=' + JSON.stringify(afterOrder.slice(0,2)));
+    } else {
+      console.warn('[TEST:cat-persist] fail reason=order-mismatch natural=' + JSON.stringify(naturalOrder.slice(0,2)) + ' persisted=' + JSON.stringify(swapped.slice(0,2)) + ' applied=' + JSON.stringify(afterOrder.slice(0,2)));
+    }
   });
 })();
 

@@ -1,4 +1,4 @@
-// Copyright 2026 DYLO Gaming. All Rights Reserved.
+// Copyright DYLO Gaming LLC 2026 All Rights Reserved.
 
 #include "DCEditorLibrary.h"
 #include "DCEditorSubsystem.h"
@@ -53,17 +53,20 @@
 #ifndef ANY_PACKAGE
 #define ANY_PACKAGE nullptr
 #endif
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 7
+// API cutoff: UE 5.5+ uses the new APIs. UE 5.0-5.4 uses the old ones.
+// Originally guarded at 5.7+, but Epic actually removed these in 5.5.
+#define DCE_USE_NEW_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
+#if DCE_USE_NEW_API
   #define DCE_ImportText(Prop, Text, ValuePtr, PPF, Owner) (Prop)->ImportText_Direct(Text, ValuePtr, Owner, PPF)
 #else
   #define DCE_ImportText(Prop, Text, ValuePtr, PPF, Owner) (Prop)->ImportText(Text, ValuePtr, PPF, Owner)
 #endif
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 7
+#if DCE_USE_NEW_API
   #define DCE_TSF_RGBA8_CHECK(Fmt) false
 #else
   #define DCE_TSF_RGBA8_CHECK(Fmt) ((Fmt) == TSF_RGBA8)
 #endif
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 7
+#if DCE_USE_NEW_API
   #define DCE_CompressImageArray(W, H, Colors, Out) { TArray64<uint8> _pngOut; FImageUtils::PNGCompressImageArray(W, H, TArrayView64<const FColor>(Colors.GetData(), Colors.Num()), _pngOut); Out.Append(_pngOut); }
 #else
   #define DCE_CompressImageArray(W, H, Colors, Out) FImageUtils::CompressImageArray(W, H, Colors, Out)
@@ -2066,7 +2069,7 @@ FString UDCEditorLibrary::SetActorPropertyFromText(const FString& ActorLabel, co
 		Owner->Modify();
 		void* Data = Prop->ContainerPtrToValuePtr<void>(Owner);
 		FStringOutputDevice ErrorText;
-		#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 7
+		#if DCE_USE_NEW_API
 		const TCHAR* Result = Prop->ImportText_Direct(*Text, Data, Owner, PPF_ExternalEditor);
 #else
 		const TCHAR* Result = Prop->ImportText(*Text, Data, PPF_ExternalEditor, Owner, &ErrorText);
