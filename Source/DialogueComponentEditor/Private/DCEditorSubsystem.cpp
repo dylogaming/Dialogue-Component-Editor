@@ -1,4 +1,4 @@
-// Copyright 2026 DYLO Gaming. All Rights Reserved.
+// Copyright DYLO Gaming LLC 2026 All Rights Reserved.
 
 #include "DCEditorSubsystem.h"
 #include "IPythonScriptPlugin.h"
@@ -45,7 +45,7 @@ void UDCEditorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		{
 			MapChangedHandle = LevelEditor->OnMapChanged().AddUObject(this, &UDCEditorSubsystem::OnMapChanged);
 		}
-		#if ENGINE_MAJOR_VERSION < 5 || ENGINE_MINOR_VERSION < 7
+		#if (ENGINE_MAJOR_VERSION < 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 5)
 		PreSaveWorldHandle = FEditorDelegates::PreSaveWorld.AddUObject(this, &UDCEditorSubsystem::OnPreSaveWorld);
 #endif
 	}
@@ -56,7 +56,7 @@ void UDCEditorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UDCEditorSubsystem::Deinitialize()
 {
 	FTSTicker::GetCoreTicker().RemoveTicker(TickDelegateHandle);
-	#if ENGINE_MAJOR_VERSION < 5 || ENGINE_MINOR_VERSION < 7
+	#if (ENGINE_MAJOR_VERSION < 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 5)
 	if (PreSaveWorldHandle.IsValid())
 	{
 		FEditorDelegates::PreSaveWorld.Remove(PreSaveWorldHandle);

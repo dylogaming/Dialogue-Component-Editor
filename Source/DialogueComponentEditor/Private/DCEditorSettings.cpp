@@ -1,4 +1,4 @@
-// Copyright 2026 DYLO Gaming. All Rights Reserved.
+// Copyright DYLO Gaming LLC 2026 All Rights Reserved.
 
 #include "DCEditorSettings.h"
 

@@ -1,7 +1,8 @@
-// Copyright 2026 DYLO Gaming. All Rights Reserved.
+// Copyright DYLO Gaming LLC 2026 All Rights Reserved.
 
 #include "DialogueComponentEditorModule.h"
 #include "DCEditorSubsystem.h"
+#include "DCEditorSettings.h"
 #include "ToolMenus.h"
 #include "LevelEditor.h"
 #include "Interfaces/IPluginManager.h"
@@ -12,6 +13,11 @@
 #include "Styling/SlateStyle.h"
 #include "Sockets.h"
 #include "SocketSubsystem.h"
+#include "EditorUtilitySubsystem.h"
+#include "EditorUtilityWidgetBlueprint.h"
+#include "ISettingsModule.h"
+#include "Containers/Ticker.h"
+#include "Editor.h"
 
 #define LOCTEXT_NAMESPACE "FDialogueComponentEditorModule"
 
@@ -88,32 +94,148 @@ void FDialogueComponentEditorModule::RegisterToolbarButton()
 		: FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.GameSettings");
 
 	FToolMenuSection& Section = Menu->FindOrAddSection("DialogueComponentEditor");
+
+	// Split-button: action button (icon = launch) + arrow combo (settings dropdown).
+	// Same pattern as Skeletal Mesh Editor's Reimport split-button.
 	Section.AddEntry(FToolMenuEntry::InitToolBarButton(
 		"OpenDialogueComponentEditor",
 		FUIAction(FExecuteAction::CreateRaw(this, &FDialogueComponentEditorModule::OnButtonClicked)),
 		LOCTEXT("ButtonLabel", "Dialogue Editor"),
-		LOCTEXT("ButtonTooltip", "Launch the Dialogue Component Editor in your browser"),
+		LOCTEXT("ButtonTooltip", "Launch the Dialogue Component Editor in your browser. Click the arrow for options."),
 		ButtonIcon
+	));
+
+	Section.AddEntry(FToolMenuEntry::InitComboButton(
+		"OpenDialogueComponentEditorArrow",
+		FUIAction(),
+		FNewToolMenuDelegate::CreateRaw(this, &FDialogueComponentEditorModule::PopulateOptionsMenu),
+		FText::GetEmpty(),
+		LOCTEXT("ArrowTooltip", "Dialogue Editor options: browser launch, legacy Editor Utility Widget, project settings."),
+		FSlateIcon(),
+		/*bSimpleComboBox=*/true
 	));
 
 	UToolMenus::Get()->RefreshAllWidgets();
 }
 
+void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
+{
+	FToolMenuSection& LaunchSection = Menu->AddSection("DCELaunch", LOCTEXT("LaunchHeader", "Dialogue Editor"));
+	LaunchSection.AddMenuEntry(
+		"LaunchDialogueEditor",
+		LOCTEXT("LaunchLabel", "Launch Dialogue Editor"),
+		LOCTEXT("LaunchTip", "Launch the browser editor (same as clicking the toolbar icon)."),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateRaw(this, &FDialogueComponentEditorModule::OnButtonClicked))
+	);
+
+	FToolMenuSection& Behavior = Menu->AddSection("DCEBehavior", LOCTEXT("BehaviorHeader", "Behavior"));
+
+	auto MakeToggle = [&Behavior](FName Name, FText Label, FText Tooltip, bool UDCEditorSettings::* Field)
+	{
+		Behavior.AddMenuEntry(
+			Name, Label, Tooltip, FSlateIcon(),
+			FUIAction(
+				FExecuteAction::CreateLambda([Field]()
+				{
+					UDCEditorSettings* S = GetMutableDefault<UDCEditorSettings>();
+					S->*Field = !(S->*Field);
+					S->SaveConfig();
+				}),
+				FCanExecuteAction(),
+				FIsActionChecked::CreateLambda([Field]()
+				{
+					return GetDefault<UDCEditorSettings>()->*Field;
+				})
+			),
+			EUserInterfaceActionType::ToggleButton
+		);
+	};
+
+	MakeToggle("OpenBrowser",
+		LOCTEXT("OpenBrowserLabel", "Open browser after launch"),
+		LOCTEXT("OpenBrowserTip", "Automatically open the editor in your default browser when the bridge server starts. Turn off to copy the URL into a different browser yourself."),
+		&UDCEditorSettings::bOpenBrowserAfterLaunch);
+
+	MakeToggle("AutoLaunchEUW",
+		LOCTEXT("AutoLaunchEUWLabel", "Also launch legacy Editor Utility Widget"),
+		LOCTEXT("AutoLaunchEUWTip", "When checked, also opens the legacy in-editor Editor Utility Widget alongside the browser. Off by default. Set the EUW asset path in Project Settings."),
+		&UDCEditorSettings::bAutoLaunchEUW);
+
+	MakeToggle("VerboseLogging",
+		LOCTEXT("VerboseLoggingLabel", "Verbose logging"),
+		LOCTEXT("VerboseLoggingTip", "Log every bridge operation. Useful for debugging, noisy otherwise."),
+		&UDCEditorSettings::bVerboseLogging);
+
+	FToolMenuSection& Misc = Menu->AddSection("DCEMisc", FText::GetEmpty());
+	Misc.AddMenuEntry(
+		"OpenProjectSettings",
+		LOCTEXT("OpenSettingsLabel", "Open Project Settings..."),
+		LOCTEXT("OpenSettingsTip", "Open Project Settings -> Plugins -> Claude Bridge for the full settings list."),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateLambda([]()
+		{
+			if (ISettingsModule* SettingsMod = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
+			{
+				SettingsMod->ShowViewer(TEXT("Project"), TEXT("Plugins"), TEXT("Claude Bridge"));
+			}
+		}))
+	);
+}
+
+void FDialogueComponentEditorModule::MaybeLaunchEUW()
+{
+	const UDCEditorSettings* Settings = GetDefault<UDCEditorSettings>();
+	if (!Settings || !Settings->bAutoLaunchEUW || !Settings->EUWBlueprintPath.IsValid())
+	{
+		return;
+	}
+	UObject* AssetObj = Settings->EUWBlueprintPath.TryLoad();
+	UEditorUtilityWidgetBlueprint* EUW = Cast<UEditorUtilityWidgetBlueprint>(AssetObj);
+	if (!EUW)
+	{
+		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] Auto-launch EUW enabled but path %s is not a valid EditorUtilityWidgetBlueprint."),
+			*Settings->EUWBlueprintPath.ToString());
+		return;
+	}
+	if (!GEditor) return;
+	UEditorUtilitySubsystem* EUSub = GEditor->GetEditorSubsystem<UEditorUtilitySubsystem>();
+	if (EUSub)
+	{
+		EUSub->SpawnAndRegisterTab(EUW);
+		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Auto-launched EUW: %s"), *Settings->EUWBlueprintPath.ToString());
+	}
+}
+
 void FDialogueComponentEditorModule::OnButtonClicked()
 {
+	const UDCEditorSettings* Settings = GetDefault<UDCEditorSettings>();
+	const bool bOpenBrowser = Settings ? Settings->bOpenBrowserAfterLaunch : true;
+
 	// If the server is already running, re-open the browser (user closed the tab).
 	if (ServerProcess.IsValid() && FPlatformProcess::IsProcRunning(ServerProcess))
 	{
-		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Server already running on port %d — reopening browser."), RunningPort);
-		FString URL = FString::Printf(TEXT("http://127.0.0.1:%d/"), RunningPort);
-		FPlatformProcess::LaunchURL(*URL, nullptr, nullptr);
+		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Server already running on port %d%s."), RunningPort,
+			bOpenBrowser ? TEXT(" — reopening browser") : TEXT(""));
+		if (bOpenBrowser)
+		{
+			FString URL = FString::Printf(TEXT("http://127.0.0.1:%d/"), RunningPort);
+			FPlatformProcess::LaunchURL(*URL, nullptr, nullptr);
+		}
+		MaybeLaunchEUW();
 		return;
 	}
 
 	// Locate the bundled server script inside the plugin's Content/Python/.
-	FString PluginContentDir = FPaths::Combine(
-		FPaths::ProjectPluginsDir(),
-		TEXT("DialogueComponentEditor/Content"));
+	// Use IPluginManager so the path resolves whether the plugin is installed
+	// project-side, engine-side, or as a Marketplace install.
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("DialogueComponentEditor"));
+	if (!Plugin.IsValid())
+	{
+		UE_LOG(LogDCEditor, Error, TEXT("[DialogueComponentEditor] Plugin not found via IPluginManager."));
+		return;
+	}
+	FString PluginContentDir = Plugin->GetContentDir();
 	FString ScriptPath = FPaths::Combine(
 		PluginContentDir, TEXT("Python/dialogue_component_editor_server.py"));
 	FString WebDir = FPaths::Combine(PluginContentDir, TEXT("Web"));
@@ -204,14 +326,19 @@ void FDialogueComponentEditorModule::OnButtonClicked()
 	UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Server started (PID %u) on port %d"), PID, RunningPort);
 
 	// Open browser after a short delay so the server can bind.
-	int32 PortCopy = RunningPort;
-	FString URL = FString::Printf(TEXT("http://127.0.0.1:%d/"), PortCopy);
-	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
-		[URL](float) -> bool {
-			FPlatformProcess::LaunchURL(*URL, nullptr, nullptr);
-			return false;
-		}
-	), 1.5f);
+	if (bOpenBrowser)
+	{
+		int32 PortCopy = RunningPort;
+		FString URL = FString::Printf(TEXT("http://127.0.0.1:%d/"), PortCopy);
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
+			[URL](float) -> bool {
+				FPlatformProcess::LaunchURL(*URL, nullptr, nullptr);
+				return false;
+			}
+		), 1.5f);
+	}
+
+	MaybeLaunchEUW();
 }
 
 void FDialogueComponentEditorModule::KillServer()

@@ -1,4 +1,4 @@
-// Copyright 2026 DYLO Gaming. All Rights Reserved.
+// Copyright DYLO Gaming LLC 2026 All Rights Reserved.
 
 #pragma once
 
@@ -13,7 +13,9 @@ public:
 
 private:
 	void RegisterToolbarButton();
+	void PopulateOptionsMenu(class UToolMenu* Menu);
 	void OnButtonClicked();
+	void MaybeLaunchEUW();
 
 	/** Handle to the bridge-server subprocess. Null when not running. */
 	FProcHandle ServerProcess;

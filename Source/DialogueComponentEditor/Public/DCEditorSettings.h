@@ -1,4 +1,4 @@
-// Copyright 2026 DYLO Gaming. All Rights Reserved.
+// Copyright DYLO Gaming LLC 2026 All Rights Reserved.
 
 #pragma once
 
@@ -40,6 +40,18 @@ public:
 	/** Enable verbose logging of all Claude Bridge operations. */
 	UPROPERTY(config, EditAnywhere, Category = "Debug", meta = (DisplayName = "Verbose Logging"))
 	bool bVerboseLogging = false;
+
+	/** Open the default browser automatically when the bridge server starts. Disable to copy the URL into a different browser yourself. */
+	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "Open Browser After Launch"))
+	bool bOpenBrowserAfterLaunch = true;
+
+	/** Also open the legacy in-editor Editor Utility Widget alongside the browser. OFF by default. The browser editor is the primary UI. */
+	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "Auto-launch Editor Utility Widget"))
+	bool bAutoLaunchEUW = false;
+
+	/** Editor Utility Widget Blueprint to spawn when 'Auto-launch EUW' is enabled. Pick a UEditorUtilityWidgetBlueprint asset from your project. */
+	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "EUW Blueprint", EditCondition = "bAutoLaunchEUW", AllowedClasses = "/Script/Blutility.EditorUtilityWidgetBlueprint"))
+	FSoftObjectPath EUWBlueprintPath;
 
 	// UDeveloperSettings interface
 	virtual FName GetContainerName() const override { return TEXT("Project"); }

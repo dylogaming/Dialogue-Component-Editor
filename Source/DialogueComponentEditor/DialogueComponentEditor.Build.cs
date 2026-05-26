@@ -1,3 +1,5 @@
+// Copyright DYLO Gaming LLC 2026 All Rights Reserved.
+
 using UnrealBuildTool;
 
 public class DialogueComponentEditor : ModuleRules
@@ -35,7 +37,9 @@ public class DialogueComponentEditor : ModuleRules
 			"JsonUtilities",
 			"DeveloperSettings",
 			"Sockets",
-			"Networking"
+			"Networking",
+			"Blutility",
+			"Settings"
 		});
 	}
 }

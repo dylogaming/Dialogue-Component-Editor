@@ -1,9 +1,10 @@
 """
-Dialogue Component Editor — bundled bridge server.
+Dialogue Component Editor - bundled bridge server.
 
-Shipped inside the DialogueComponentEditor UE plugin. Launched automatically
-by the plugin's toolbar button. Serves the bundled HTML editor and bridges
-HTTP requests to UE via file-drop Python scripts.
+Shipped inside the DialogueComponentEditor UE plugin. Launched
+automatically by the plugin's toolbar button. Serves the bundled
+HTML editor and bridges HTTP requests to UE via file-drop Python
+scripts.
 
 Usage (normally launched by the plugin, not manually):
   python dialogue_component_editor_server.py [--bridge PATH] [--port 8766] [--webdir PATH]
@@ -619,18 +620,12 @@ _REFRESH_EUW_SNIPPET = (
     "        if rr.get('count',0) > 0:\n"
     "            r['euw_called'].append(name)\n"
     "            _hit = True\n"
+    "    # EUW auto-respawn fallback removed — was force-launching the legacy\n"
+    "    # Editor Utility Widget on every bridge call when no live widget was found.\n"
+    "    # Browser editor is the primary UI now; EUW launch is opt-in via the\n"
+    "    # plugin toolbar dropdown.\n"
     "    if not _hit:\n"
-    "        # Fallback: close and respawn the EUW tab\n"
-    "        try:\n"
-    "            _eusub = unreal.EditorUtilitySubsystem()\n"
-    f"            _ewbp = unreal.EditorAssetLibrary.load_asset('{_EUW_BP}')\n"
-    "            if _ewbp:\n"
-    "                _tid = _eusub.register_tab_and_get_id(_ewbp)\n"
-    "                if _eusub.does_tab_exist(_tid): _eusub.close_tab_by_id(_tid)\n"
-    "                _eusub.spawn_and_register_tab(_ewbp)\n"
-    "                r['euw_respawned'] = True\n"
-    "        except Exception as _re:\n"
-    "            r['euw_respawn_err'] = str(_re)\n"
+    "        r['euw_called_none'] = True\n"
     "except Exception as _e:\n"
     "    r['euw_refresh_err'] = str(_e)\n"
     "try:\n"
@@ -753,26 +748,51 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(204); self._cors(); self.end_headers()
 
     def do_GET(self):
-        # Serve the bundled HTML editor on / or by filename
-        if self.path in ("/", "/dialogue_component_editor.html", "/dialogue_editor.html"):
-            html_path = os.path.join(self.server.webdir, "dialogue_component_editor.html")
-            if os.path.exists(html_path):
-                try:
-                    with open(html_path, "rb") as f:
-                        data = f.read()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.send_header("Content-Length", str(len(data)))
-                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-                    self.send_header("Pragma", "no-cache")
-                    self.send_header("Expires", "0")
-                    self._cors()
-                    self.end_headers()
-                    self.wfile.write(data)
-                except Exception as e:
-                    self._json(500, {"ok": False, "error": str(e)})
-            else:
-                self._json(404, {"ok": False, "error": "HTML not found at " + html_path})
+        if self.path == "/launch_euw":
+            # User-initiated EUW launch (button in the editor header).
+            # Distinct from the legacy auto-respawn we removed — this only
+            # fires on explicit click.
+            r = run_script(self.bridge_dir, (
+                "import unreal\n"
+                f"_ewbp = unreal.EditorAssetLibrary.load_asset('{_EUW_BP}')\n"
+                "if not _ewbp:\n"
+                f"    _result = {{'ok': False, 'error': 'EUW not found at {_EUW_BP}'}}\n"
+                "else:\n"
+                "    _eusub = unreal.EditorUtilitySubsystem()\n"
+                "    _tid = _eusub.register_tab_and_get_id(_ewbp)\n"
+                "    if _eusub.does_tab_exist(_tid):\n"
+                "        _eusub.close_tab_by_id(_tid)\n"
+                "    _eusub.spawn_and_register_tab(_ewbp)\n"
+                "    _result = {'ok': True, 'asset': _ewbp.get_path_name()}\n"
+            ), op="launch_euw")
+            self._json(200, r); return
+        if self.path == "/version":
+            # Pull plugin version straight from the bundled DialogueComponentEditor.uplugin
+            # so the editor UI never drifts from what's actually shipped. Walks up from
+            # this script's location (Content/Python/...) to find the .uplugin at the
+            # plugin root.
+            try:
+                here = os.path.dirname(os.path.abspath(__file__))
+                uplugin = None
+                cur = here
+                for _ in range(6):
+                    cand = os.path.join(cur, "DialogueComponentEditor.uplugin")
+                    if os.path.exists(cand):
+                        uplugin = cand; break
+                    cur = os.path.dirname(cur)
+                if uplugin:
+                    with open(uplugin, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    self._json(200, {
+                        "ok": True,
+                        "version": meta.get("VersionName", "dev"),
+                        "version_int": meta.get("Version", 0),
+                        "friendly_name": meta.get("FriendlyName", ""),
+                    })
+                else:
+                    self._json(200, {"ok": True, "version": "dev", "version_int": 0, "friendly_name": "Dialogue Component Editor (dev)"})
+            except Exception as e:
+                self._json(500, {"ok": False, "error": str(e)})
             return
         if self.path == "/health":
             # Check if UE is actually running by looking for recent script processing.
