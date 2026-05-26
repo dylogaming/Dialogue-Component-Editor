@@ -45,12 +45,8 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "Open Browser After Launch"))
 	bool bOpenBrowserAfterLaunch = true;
 
-	/** Also open the legacy in-editor Editor Utility Widget alongside the browser. OFF by default. The browser editor is the primary UI. */
-	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "Auto-launch Editor Utility Widget"))
-	bool bAutoLaunchEUW = false;
-
-	/** Editor Utility Widget Blueprint to spawn when 'Auto-launch EUW' is enabled. Pick a UEditorUtilityWidgetBlueprint asset from your project. */
-	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "EUW Blueprint", EditCondition = "bAutoLaunchEUW", AllowedClasses = "/Script/Blutility.EditorUtilityWidgetBlueprint"))
+	/** Editor Utility Widget Blueprint to spawn when the toolbar dropdown's "Launch Editor Utility Widget" entry is clicked. Pick a UEditorUtilityWidgetBlueprint asset from your project. */
+	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "EUW Blueprint", AllowedClasses = "/Script/Blutility.EditorUtilityWidgetBlueprint"))
 	FSoftObjectPath EUWBlueprintPath;
 
 	// UDeveloperSettings interface

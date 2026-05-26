@@ -128,6 +128,13 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 		FSlateIcon(),
 		FUIAction(FExecuteAction::CreateRaw(this, &FDialogueComponentEditorModule::OnButtonClicked))
 	);
+	LaunchSection.AddMenuEntry(
+		"LaunchEUW",
+		LOCTEXT("LaunchEUWLabel", "Launch Editor Utility Widget"),
+		LOCTEXT("LaunchEUWTip", "Open the legacy in-editor Editor Utility Widget tab. Set the EUW asset path in Project Settings if not already set."),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateRaw(this, &FDialogueComponentEditorModule::LaunchEUW))
+	);
 
 	FToolMenuSection& Behavior = Menu->AddSection("DCEBehavior", LOCTEXT("BehaviorHeader", "Behavior"));
 
@@ -157,11 +164,6 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 		LOCTEXT("OpenBrowserTip", "Automatically open the editor in your default browser when the bridge server starts. Turn off to copy the URL into a different browser yourself."),
 		&UDCEditorSettings::bOpenBrowserAfterLaunch);
 
-	MakeToggle("AutoLaunchEUW",
-		LOCTEXT("AutoLaunchEUWLabel", "Also launch legacy Editor Utility Widget"),
-		LOCTEXT("AutoLaunchEUWTip", "When checked, also opens the legacy in-editor Editor Utility Widget alongside the browser. Off by default. Set the EUW asset path in Project Settings."),
-		&UDCEditorSettings::bAutoLaunchEUW);
-
 	MakeToggle("VerboseLogging",
 		LOCTEXT("VerboseLoggingLabel", "Verbose logging"),
 		LOCTEXT("VerboseLoggingTip", "Log every bridge operation. Useful for debugging, noisy otherwise."),
@@ -183,18 +185,19 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 	);
 }
 
-void FDialogueComponentEditorModule::MaybeLaunchEUW()
+void FDialogueComponentEditorModule::LaunchEUW()
 {
 	const UDCEditorSettings* Settings = GetDefault<UDCEditorSettings>();
-	if (!Settings || !Settings->bAutoLaunchEUW || !Settings->EUWBlueprintPath.IsValid())
+	if (!Settings || !Settings->EUWBlueprintPath.IsValid())
 	{
+		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] Launch EUW clicked but no EUW Blueprint path set. Configure it in Project Settings > Plugins > Claude Bridge."));
 		return;
 	}
 	UObject* AssetObj = Settings->EUWBlueprintPath.TryLoad();
 	UEditorUtilityWidgetBlueprint* EUW = Cast<UEditorUtilityWidgetBlueprint>(AssetObj);
 	if (!EUW)
 	{
-		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] Auto-launch EUW enabled but path %s is not a valid EditorUtilityWidgetBlueprint."),
+		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] EUW Blueprint path %s is not a valid EditorUtilityWidgetBlueprint."),
 			*Settings->EUWBlueprintPath.ToString());
 		return;
 	}
@@ -203,7 +206,7 @@ void FDialogueComponentEditorModule::MaybeLaunchEUW()
 	if (EUSub)
 	{
 		EUSub->SpawnAndRegisterTab(EUW);
-		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Auto-launched EUW: %s"), *Settings->EUWBlueprintPath.ToString());
+		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Launched EUW: %s"), *Settings->EUWBlueprintPath.ToString());
 	}
 }
 
@@ -222,8 +225,7 @@ void FDialogueComponentEditorModule::OnButtonClicked()
 			FString URL = FString::Printf(TEXT("http://127.0.0.1:%d/"), RunningPort);
 			FPlatformProcess::LaunchURL(*URL, nullptr, nullptr);
 		}
-		MaybeLaunchEUW();
-		return;
+			return;
 	}
 
 	// Locate the bundled server script inside the plugin's Content/Python/.
@@ -338,7 +340,6 @@ void FDialogueComponentEditorModule::OnButtonClicked()
 		), 1.5f);
 	}
 
-	MaybeLaunchEUW();
 }
 
 void FDialogueComponentEditorModule::KillServer()
