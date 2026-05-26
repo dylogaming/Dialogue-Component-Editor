@@ -748,6 +748,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(204); self._cors(); self.end_headers()
 
     def do_GET(self):
+        # Serve the bundled HTML editor on / or by filename
+        if self.path in ("/", "/dialogue_component_editor.html", "/dialogue_editor.html"):
+            html_path = os.path.join(self.server.webdir, "dialogue_component_editor.html")
+            if os.path.exists(html_path):
+                try:
+                    with open(html_path, "rb") as f:
+                        data = f.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                    self.send_header("Pragma", "no-cache")
+                    self.send_header("Expires", "0")
+                    self._cors()
+                    self.end_headers()
+                    self.wfile.write(data)
+                except Exception as e:
+                    self._json(500, {"ok": False, "error": str(e)})
+            else:
+                self._json(404, {"ok": False, "error": "HTML not found at " + html_path})
+            return
         if self.path == "/launch_euw":
             # User-initiated EUW launch (button in the editor header).
             # Distinct from the legacy auto-respawn we removed — this only
@@ -766,6 +787,54 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "    _result = {'ok': True, 'asset': _ewbp.get_path_name()}\n"
             ), op="launch_euw")
             self._json(200, r); return
+        if self.path == "/check_update":
+            # Compares local .uplugin VersionName to the matching engine-version
+            # branch on dylogaming/Dialogue-Component-Editor. Returns quickly
+            # and fails silently — the editor uses this to surface an amber
+            # "update available" tooltip; never blocks anything.
+            try:
+                import re, urllib.request
+                here = os.path.dirname(os.path.abspath(__file__))
+                uplugin = None
+                cur = here
+                for _ in range(6):
+                    cand = os.path.join(cur, "DialogueComponentEditor.uplugin")
+                    if os.path.exists(cand):
+                        uplugin = cand; break
+                    cur = os.path.dirname(cur)
+                if not uplugin:
+                    self._json(200, {"ok": False, "error": "local .uplugin not found"}); return
+                with open(uplugin, "r", encoding="utf-8") as f:
+                    local_meta = json.load(f)
+                local_v = local_meta.get("VersionName", "")
+
+                # Engine version from sys.executable, e.g. .../UE_5.7/... -> "5.7"
+                m = re.search(r"UE_(\d+\.\d+)", sys.executable.replace("\\", "/"))
+                engine_v = m.group(1) if m else "5.7"
+
+                url = ("https://raw.githubusercontent.com/dylogaming/"
+                       "Dialogue-Component-Editor/" + engine_v +
+                       "/DialogueComponentEditor.uplugin")
+                req = urllib.request.Request(url, headers={"User-Agent": "DCE-bridge"})
+                with urllib.request.urlopen(req, timeout=4) as resp:
+                    remote_meta = json.load(resp)
+                remote_v = remote_meta.get("VersionName", "")
+
+                def parse(s):
+                    try: return tuple(int(p) for p in s.split("."))
+                    except Exception: return (0,)
+                update_available = parse(remote_v) > parse(local_v)
+
+                self._json(200, {
+                    "ok": True,
+                    "local_version": local_v,
+                    "remote_version": remote_v,
+                    "engine_branch": engine_v,
+                    "update_available": update_available,
+                })
+            except Exception as e:
+                self._json(200, {"ok": False, "error": str(e)})
+            return
         if self.path == "/version":
             # Pull plugin version straight from the bundled DialogueComponentEditor.uplugin
             # so the editor UI never drifts from what's actually shipped. Walks up from
