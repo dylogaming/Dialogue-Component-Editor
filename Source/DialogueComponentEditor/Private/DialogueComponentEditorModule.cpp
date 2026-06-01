@@ -16,6 +16,14 @@
 #include "EditorUtilitySubsystem.h"
 #include "EditorUtilityWidgetBlueprint.h"
 #include "ISettingsModule.h"
+// UEditorStyleSettings header path differs by engine version. UE 5.0 ships it under the
+// EditorStyle module's Classes/ subfolder; 5.4+ relocated it under UnrealEd's Settings/.
+#if defined(__has_include) && __has_include("Settings/EditorStyleSettings.h")
+#include "Settings/EditorStyleSettings.h"
+#else
+#include "Classes/EditorStyleSettings.h"
+#endif
+#include "Settings/LevelEditorPlaySettings.h"
 #include "Containers/Ticker.h"
 #include "Editor.h"
 
@@ -128,13 +136,6 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 		FSlateIcon(),
 		FUIAction(FExecuteAction::CreateRaw(this, &FDialogueComponentEditorModule::OnButtonClicked))
 	);
-	LaunchSection.AddMenuEntry(
-		"LaunchEUW",
-		LOCTEXT("LaunchEUWLabel", "Launch Editor Utility Widget"),
-		LOCTEXT("LaunchEUWTip", "Open the legacy in-editor Editor Utility Widget tab. Set the EUW asset path in Project Settings if not already set."),
-		FSlateIcon(),
-		FUIAction(FExecuteAction::CreateRaw(this, &FDialogueComponentEditorModule::LaunchEUW))
-	);
 
 	FToolMenuSection& Behavior = Menu->AddSection("DCEBehavior", LOCTEXT("BehaviorHeader", "Behavior"));
 
@@ -164,10 +165,63 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 		LOCTEXT("OpenBrowserTip", "Automatically open the editor in your default browser when the bridge server starts. Turn off to copy the URL into a different browser yourself."),
 		&UDCEditorSettings::bOpenBrowserAfterLaunch);
 
+	MakeToggle("AutoLaunchEUW",
+		LOCTEXT("AutoLaunchEUWLabel", "Also launch legacy Editor Utility Widget"),
+		LOCTEXT("AutoLaunchEUWTip", "When checked, also opens the legacy in-editor Editor Utility Widget alongside the browser. Off by default. Set the EUW asset path in Project Settings."),
+		&UDCEditorSettings::bAutoLaunchEUW);
+
 	MakeToggle("VerboseLogging",
 		LOCTEXT("VerboseLoggingLabel", "Verbose logging"),
 		LOCTEXT("VerboseLoggingTip", "Log every bridge operation. Useful for debugging, noisy otherwise."),
 		&UDCEditorSettings::bVerboseLogging);
+
+	FToolMenuSection& Appearance = Menu->AddSection("DCEAppearance", LOCTEXT("AppearanceHeader", "Editor Appearance"));
+	Appearance.AddMenuEntry(
+		"UseSmallToolbarIcons",
+		LOCTEXT("UseSmallToolbarIconsLabel", "Use small toolbar icons"),
+		LOCTEXT("UseSmallToolbarIconsTip", "Toggles UE's Editor Preferences -> General - Appearance -> User Interface -> Use Small Tool Bar Icons. Shrinks toolbar buttons across the editor, reclaiming vertical space."),
+		FSlateIcon(),
+		FUIAction(
+			FExecuteAction::CreateLambda([]()
+			{
+				UEditorStyleSettings* S = GetMutableDefault<UEditorStyleSettings>();
+				S->bUseSmallToolBarIcons = !S->bUseSmallToolBarIcons;
+				S->PostEditChange();
+				S->SaveConfig();
+			}),
+			FCanExecuteAction(),
+			FIsActionChecked::CreateLambda([]()
+			{
+				return GetDefault<UEditorStyleSettings>()->bUseSmallToolBarIcons != 0;
+			})
+		),
+		EUserInterfaceActionType::ToggleButton
+	);
+
+	// Mirrors UE's Editor Preferences -> Level Editor - Play -> Play in New Window -> Always On Top.
+	// Bitfield on ULevelEditorPlaySettings, so we toggle through GetMutableDefault rather than a
+	// generic property helper. Keeps the PIE window above other windows when Play In Editor starts.
+	Appearance.AddMenuEntry(
+		"PIEAlwaysOnTop",
+		LOCTEXT("PIEAlwaysOnTopLabel", "PIE window always on top"),
+		LOCTEXT("PIEAlwaysOnTopTip", "Toggles UE's Editor Preferences -> Level Editor - Play -> Play in New Window -> Always On Top. Keeps the PIE window above other windows when you start Play In Editor."),
+		FSlateIcon(),
+		FUIAction(
+			FExecuteAction::CreateLambda([]()
+			{
+				ULevelEditorPlaySettings* S = GetMutableDefault<ULevelEditorPlaySettings>();
+				S->PIEAlwaysOnTop = !S->PIEAlwaysOnTop;
+				S->PostEditChange();
+				S->SaveConfig();
+			}),
+			FCanExecuteAction(),
+			FIsActionChecked::CreateLambda([]()
+			{
+				return GetDefault<ULevelEditorPlaySettings>()->PIEAlwaysOnTop != 0;
+			})
+		),
+		EUserInterfaceActionType::ToggleButton
+	);
 
 	FToolMenuSection& Misc = Menu->AddSection("DCEMisc", FText::GetEmpty());
 	Misc.AddMenuEntry(
@@ -185,19 +239,18 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 	);
 }
 
-void FDialogueComponentEditorModule::LaunchEUW()
+void FDialogueComponentEditorModule::MaybeLaunchEUW()
 {
 	const UDCEditorSettings* Settings = GetDefault<UDCEditorSettings>();
-	if (!Settings || !Settings->EUWBlueprintPath.IsValid())
+	if (!Settings || !Settings->bAutoLaunchEUW || !Settings->EUWBlueprintPath.IsValid())
 	{
-		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] Launch EUW clicked but no EUW Blueprint path set. Configure it in Project Settings > Plugins > Claude Bridge."));
 		return;
 	}
 	UObject* AssetObj = Settings->EUWBlueprintPath.TryLoad();
 	UEditorUtilityWidgetBlueprint* EUW = Cast<UEditorUtilityWidgetBlueprint>(AssetObj);
 	if (!EUW)
 	{
-		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] EUW Blueprint path %s is not a valid EditorUtilityWidgetBlueprint."),
+		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] Auto-launch EUW enabled but path %s is not a valid EditorUtilityWidgetBlueprint."),
 			*Settings->EUWBlueprintPath.ToString());
 		return;
 	}
@@ -206,7 +259,7 @@ void FDialogueComponentEditorModule::LaunchEUW()
 	if (EUSub)
 	{
 		EUSub->SpawnAndRegisterTab(EUW);
-		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Launched EUW: %s"), *Settings->EUWBlueprintPath.ToString());
+		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Auto-launched EUW: %s"), *Settings->EUWBlueprintPath.ToString());
 	}
 }
 
@@ -225,7 +278,8 @@ void FDialogueComponentEditorModule::OnButtonClicked()
 			FString URL = FString::Printf(TEXT("http://127.0.0.1:%d/"), RunningPort);
 			FPlatformProcess::LaunchURL(*URL, nullptr, nullptr);
 		}
-			return;
+		MaybeLaunchEUW();
+		return;
 	}
 
 	// Locate the bundled server script inside the plugin's Content/Python/.
@@ -340,6 +394,7 @@ void FDialogueComponentEditorModule::OnButtonClicked()
 		), 1.5f);
 	}
 
+	MaybeLaunchEUW();
 }
 
 void FDialogueComponentEditorModule::KillServer()

@@ -16,6 +16,7 @@ private:
 	void PopulateOptionsMenu(class UToolMenu* Menu);
 	void OnButtonClicked();
 	void LaunchEUW();
+	void MaybeLaunchEUW();
 
 	/** Handle to the bridge-server subprocess. Null when not running. */
 	FProcHandle ServerProcess;

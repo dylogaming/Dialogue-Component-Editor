@@ -49,6 +49,10 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "EUW Blueprint", AllowedClasses = "/Script/Blutility.EditorUtilityWidgetBlueprint"))
 	FSoftObjectPath EUWBlueprintPath;
 
+	/** When the toolbar button launches the browser editor, also spawn the legacy in-editor EUW alongside. Requires EUW Blueprint to be set above. */
+	UPROPERTY(config, EditAnywhere, Category = "Toolbar", meta = (DisplayName = "Also Launch Legacy EUW"))
+	bool bAutoLaunchEUW = false;
+
 	// UDeveloperSettings interface
 	virtual FName GetContainerName() const override { return TEXT("Project"); }
 	virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
