@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
-	"Version": 8,
-	"VersionName": "1.003",
+	"Version": 9,
+	"VersionName": "1.004",
 	"EngineVersion": "5.7.0",
 	"FriendlyName": "Dialogue Component Editor",
 	"Description": "Node-graph editor for the Dialogue Component in your web browser.",

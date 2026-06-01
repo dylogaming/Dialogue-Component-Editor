@@ -39,7 +39,8 @@ public class DialogueComponentEditor : ModuleRules
 			"Sockets",
 			"Networking",
 			"Blutility",
-			"Settings"
+			"Settings",
+			"EditorStyle"
 		});
 	}
 }
