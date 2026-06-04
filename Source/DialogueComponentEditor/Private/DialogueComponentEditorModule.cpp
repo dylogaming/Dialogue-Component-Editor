@@ -26,8 +26,25 @@
 #include "Settings/LevelEditorPlaySettings.h"
 #include "Containers/Ticker.h"
 #include "Editor.h"
+#include "Framework/Notifications/NotificationManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
 
 #define LOCTEXT_NAMESPACE "FDialogueComponentEditorModule"
+
+// Show a transient Unreal editor toast (bottom-right) so clicking the toolbar
+// button gives immediate in-editor feedback that the launch was triggered.
+static void ShowDCEEditorNotification(const FText& Message, bool bSuccess = true)
+{
+	FNotificationInfo Info(Message);
+	Info.ExpireDuration = 4.0f;
+	Info.bFireAndForget = true;
+	Info.bUseSuccessFailIcons = true;
+	TSharedPtr<SNotificationItem> Item = FSlateNotificationManager::Get().AddNotification(Info);
+	if (Item.IsValid())
+	{
+		Item->SetCompletionState(bSuccess ? SNotificationItem::CS_Success : SNotificationItem::CS_Fail);
+	}
+}
 
 // Starting port — will auto-increment if already in use.
 static const int32 DCE_PORT_START = 8766;
@@ -136,6 +153,16 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 		FSlateIcon(),
 		FUIAction(FExecuteAction::CreateRaw(this, &FDialogueComponentEditorModule::OnButtonClicked))
 	);
+	// On-demand launch of the legacy Editor Utility Widget. Replaces the old
+	// "Also launch ..." toggle: the browser editor is the primary UI, so the EUW
+	// is now opt-in per click instead of auto-spawning on every editor launch.
+	LaunchSection.AddMenuEntry(
+		"LaunchEUW",
+		LOCTEXT("LaunchEUWLabel", "Launch Editor Utility Widget"),
+		LOCTEXT("LaunchEUWTip", "Open the legacy in-editor Editor Utility Widget now. Set its asset path in Project Settings -> Plugins -> Claude Bridge."),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateRaw(this, &FDialogueComponentEditorModule::MaybeLaunchEUW))
+	);
 
 	FToolMenuSection& Behavior = Menu->AddSection("DCEBehavior", LOCTEXT("BehaviorHeader", "Behavior"));
 
@@ -164,11 +191,6 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 		LOCTEXT("OpenBrowserLabel", "Open browser after launch"),
 		LOCTEXT("OpenBrowserTip", "Automatically open the editor in your default browser when the bridge server starts. Turn off to copy the URL into a different browser yourself."),
 		&UDCEditorSettings::bOpenBrowserAfterLaunch);
-
-	MakeToggle("AutoLaunchEUW",
-		LOCTEXT("AutoLaunchEUWLabel", "Also launch legacy Editor Utility Widget"),
-		LOCTEXT("AutoLaunchEUWTip", "When checked, also opens the legacy in-editor Editor Utility Widget alongside the browser. Off by default. Set the EUW asset path in Project Settings."),
-		&UDCEditorSettings::bAutoLaunchEUW);
 
 	MakeToggle("VerboseLogging",
 		LOCTEXT("VerboseLoggingLabel", "Verbose logging"),
@@ -239,18 +261,22 @@ void FDialogueComponentEditorModule::PopulateOptionsMenu(UToolMenu* Menu)
 	);
 }
 
+// On-demand launch of the legacy Editor Utility Widget, fired from the toolbar
+// dropdown's "Launch Editor Utility Widget" button. No longer gated on an
+// auto-launch toggle — the EUW only opens when the user explicitly asks for it.
 void FDialogueComponentEditorModule::MaybeLaunchEUW()
 {
 	const UDCEditorSettings* Settings = GetDefault<UDCEditorSettings>();
-	if (!Settings || !Settings->bAutoLaunchEUW || !Settings->EUWBlueprintPath.IsValid())
+	if (!Settings || !Settings->EUWBlueprintPath.IsValid())
 	{
+		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] No Editor Utility Widget asset path set. Set it in Project Settings -> Plugins -> Claude Bridge."));
 		return;
 	}
 	UObject* AssetObj = Settings->EUWBlueprintPath.TryLoad();
 	UEditorUtilityWidgetBlueprint* EUW = Cast<UEditorUtilityWidgetBlueprint>(AssetObj);
 	if (!EUW)
 	{
-		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] Auto-launch EUW enabled but path %s is not a valid EditorUtilityWidgetBlueprint."),
+		UE_LOG(LogDCEditor, Warning, TEXT("[DialogueComponentEditor] EUW path %s is not a valid EditorUtilityWidgetBlueprint."),
 			*Settings->EUWBlueprintPath.ToString());
 		return;
 	}
@@ -259,7 +285,7 @@ void FDialogueComponentEditorModule::MaybeLaunchEUW()
 	if (EUSub)
 	{
 		EUSub->SpawnAndRegisterTab(EUW);
-		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Auto-launched EUW: %s"), *Settings->EUWBlueprintPath.ToString());
+		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Launched EUW: %s"), *Settings->EUWBlueprintPath.ToString());
 	}
 }
 
@@ -273,12 +299,14 @@ void FDialogueComponentEditorModule::OnButtonClicked()
 	{
 		UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Server already running on port %d%s."), RunningPort,
 			bOpenBrowser ? TEXT(" — reopening browser") : TEXT(""));
+		ShowDCEEditorNotification(bOpenBrowser
+			? FText::Format(LOCTEXT("DCEAlreadyRunningReopen", "Dialogue Editor already running — reopening browser (port {0})."), FText::AsNumber(RunningPort, &FNumberFormattingOptions::DefaultNoGrouping()))
+			: LOCTEXT("DCEAlreadyRunning", "Dialogue Editor server already running."));
 		if (bOpenBrowser)
 		{
 			FString URL = FString::Printf(TEXT("http://127.0.0.1:%d/"), RunningPort);
 			FPlatformProcess::LaunchURL(*URL, nullptr, nullptr);
 		}
-		MaybeLaunchEUW();
 		return;
 	}
 
@@ -376,10 +404,14 @@ void FDialogueComponentEditorModule::OnButtonClicked()
 	if (!ServerProcess.IsValid())
 	{
 		UE_LOG(LogDCEditor, Error, TEXT("[DialogueComponentEditor] Failed to spawn server."));
+		ShowDCEEditorNotification(LOCTEXT("DCELaunchFailed", "Dialogue Editor failed to start the bridge server. See the Output Log."), /*bSuccess=*/false);
 		return;
 	}
 
 	UE_LOG(LogDCEditor, Log, TEXT("[DialogueComponentEditor] Server started (PID %u) on port %d"), PID, RunningPort);
+	ShowDCEEditorNotification(FText::Format(
+		LOCTEXT("DCELaunching", "Launching Dialogue Editor on port {0}…"),
+		FText::AsNumber(RunningPort, &FNumberFormattingOptions::DefaultNoGrouping())));
 
 	// Open browser after a short delay so the server can bind.
 	if (bOpenBrowser)
@@ -393,8 +425,6 @@ void FDialogueComponentEditorModule::OnButtonClicked()
 			}
 		), 1.5f);
 	}
-
-	MaybeLaunchEUW();
 }
 
 void FDialogueComponentEditorModule::KillServer()
