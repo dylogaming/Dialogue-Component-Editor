@@ -17,6 +17,23 @@ DEFAULT_WEBDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", 
 POLL_INTERVAL = 0.02
 TIMEOUT = 15.0
 
+# PROTECTED — server lifecycle / orphan auto-shutdown, confirmed working 2026-06-03. Do not modify without explicit ask.
+# ── Server lifecycle / orphan auto-shutdown ─────────────────────────────────
+# A bridge server is "orphaned" when its UE project is gone. Rules:
+#   * no UE project AND no browser tab   -> shut the server down immediately
+#   * no UE project but a browser is open -> after NO_PROJECT_GRACE, ask the
+#     browser whether to keep working (resets the timer) or close the server.
+# Timers are env-overridable so the behavior can be exercised quickly in tests.
+def _envf(name, default):
+    try: return float(os.environ.get(name, default))
+    except Exception: return float(default)
+NO_PROJECT_GRACE = _envf("DCE_NO_PROJECT_GRACE", 600)   # 10 minutes
+BROWSER_TIMEOUT  = _envf("DCE_BROWSER_TIMEOUT", 45)     # browser gone if silent this long
+MONITOR_INTERVAL = _envf("DCE_MONITOR_INTERVAL", 30)
+UE_PING_TIMEOUT  = _envf("DCE_UE_PING_TIMEOUT", 6)
+_LIFE = {"last_browser": 0.0, "no_project_since": 0.0, "prompt": False}
+_LIFE_LOCK = threading.Lock()
+
 # PROTECTED - do not modify without explicit request
 def run_script(bridge_dir: str, body: str, op: str = "") -> dict:
     """Drop a Python script into pending/, wait for results/<name>_result.json.
@@ -1020,6 +1037,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
         except Exception as e:
             self._json(400, {"ok": False, "error": f"bad json: {e}"}); return
+        # PROTECTED — lifecycle endpoints (/heartbeat /keepalive /shutdown), confirmed working 2026-06-03. Do not modify without explicit ask.
+        # ── Server lifecycle endpoints (orphan auto-shutdown) ──────────────
+        # The browser pings /heartbeat so the server knows a tab is alive; the
+        # response carries `prompt` when the UE project has been gone past the
+        # grace window. /keepalive restarts the timer; /shutdown closes the server.
+        if self.path == "/heartbeat":
+            with _LIFE_LOCK:
+                _LIFE["last_browser"] = time.time()
+                resp = {"ok": True, "prompt": _LIFE["prompt"], "no_project": _LIFE["no_project_since"] != 0.0}
+            self._json(200, resp); return
+        if self.path == "/keepalive":
+            with _LIFE_LOCK:
+                _LIFE["no_project_since"] = time.time()  # restart the grace timer
+                _LIFE["prompt"] = False
+            self._json(200, {"ok": True}); return
+        if self.path == "/shutdown":
+            self._json(200, {"ok": True, "closing": True})
+            print("[lifecycle] browser requested shutdown")
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return
         # Browser devtools forwarder: the web editor POSTs console.error,
         # console.warn, window.onerror, and unhandledrejection events to
         # this endpoint so we can tail them from disk when debugging. No
@@ -1104,6 +1141,69 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._json(404, {"ok": False, "error": "unknown path"})
 
 
+# PROTECTED — lifecycle monitor (UE ping / browser heartbeat / auto-shutdown), confirmed working 2026-06-03. Do not modify without explicit ask.
+def _ue_ping(bridge_dir, timeout):
+    """Lightweight UE liveness check: drop a trivial script and see if UE writes
+    its result within `timeout`. Self-contained (never touches run_script) and
+    cleans up after itself so it can't pile up files when UE is gone."""
+    uid = uuid.uuid4().hex[:8]
+    name = "web_lifecycle_ping_" + uid
+    pending = os.path.join(bridge_dir, "pending", name + ".py")
+    result_path = os.path.join(bridge_dir, "results", name + "_result.json")
+    full = (
+        "import json, os\n"
+        "_result = {'ok': True, 'ping': 1}\n"
+        "_path = os.path.join(CLAUDE_BRIDGE_RESULTS_DIR, CLAUDE_BRIDGE_SCRIPT_NAME.replace('.py','') + '_result.json')\n"
+        "with open(_path, 'w', encoding='utf-8') as _f:\n"
+        "    json.dump(_result, _f)\n"
+    )
+    try:
+        with open(pending, "w", encoding="utf-8") as f:
+            f.write(full)
+    except Exception:
+        return False
+    deadline = time.time() + timeout
+    ok = False
+    while time.time() < deadline:
+        if os.path.exists(result_path):
+            ok = True; break
+        time.sleep(0.05)
+    for p in (pending, result_path):
+        try: os.remove(p)
+        except Exception: pass
+    return ok
+
+
+def _lifecycle_monitor(bridge_dir, server):
+    while True:
+        time.sleep(MONITOR_INTERVAL)
+        now = time.time()
+        ue_alive = _ue_ping(bridge_dir, UE_PING_TIMEOUT)
+        with _LIFE_LOCK:
+            browser_alive = (now - _LIFE["last_browser"]) < BROWSER_TIMEOUT
+            if ue_alive:
+                _LIFE["no_project_since"] = 0.0
+                _LIFE["prompt"] = False
+                continue
+            # No UE project is associated with this server.
+            if not browser_alive:
+                print("[lifecycle] no UE project and no browser -> shutting down server")
+                threading.Thread(target=server.shutdown, daemon=True).start()
+                return
+            # Browser still open: run the grace timer, then flag a prompt.
+            if _LIFE["no_project_since"] == 0.0:
+                _LIFE["no_project_since"] = now
+                print("[lifecycle] UE project gone; browser open -> starting grace timer")
+            elif (now - _LIFE["no_project_since"]) >= NO_PROJECT_GRACE:
+                _LIFE["prompt"] = True
+
+
+def _start_lifecycle(bridge_dir, server):
+    with _LIFE_LOCK:
+        _LIFE["last_browser"] = time.time()  # startup grace until the browser first pings
+    threading.Thread(target=_lifecycle_monitor, args=(bridge_dir, server), daemon=True).start()
+
+
 class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
@@ -1124,6 +1224,7 @@ def main():
     print(f"bridge server on http://127.0.0.1:{args.port}")
     print(f"  bridge dir: {args.bridge}")
     print(f"  web dir:    {server.webdir}")
+    _start_lifecycle(args.bridge, server)
     try: server.serve_forever()
     except KeyboardInterrupt: print("bye")
 

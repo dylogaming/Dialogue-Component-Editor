@@ -261,6 +261,8 @@ header h1 span{color:var(--green);font-weight:400;font-size:11px;margin-left:6px
 #ctx-menu{display:none;position:absolute;background:var(--surface);border:1px solid var(--border2);border-radius:7px;padding:4px;z-index:200;min-width:160px;box-shadow:0 4px 20px rgba(0,0,0,0.5);}
 .ctx-item{padding:6px 12px;font-size:12px;color:var(--text);cursor:pointer;border-radius:4px;}
 .ctx-item:hover{background:var(--surface2);}
+.tidy-item{display:flex;align-items:center;gap:6px;padding:5px 12px 5px 6px;white-space:nowrap;}
+.tidy-item .td-check{display:inline-block;width:12px;flex:none;text-align:center;color:var(--blue);font-size:11px;}
 .ctx-sep{height:1px;background:var(--border);margin:3px 0;}
 /* Modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:300;display:none;align-items:center;justify-content:center;}
@@ -386,6 +388,15 @@ body.outliner-open #stats-bar{left:252px;}
 .asset-picker-pop .ap-item-path{font-size:8px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .asset-picker-pop .ap-none{padding:6px 8px;cursor:pointer;color:var(--muted);font-style:italic;}
 .asset-picker-pop .ap-none:hover{background:var(--surface2);}
+/* Generic searchable-select popup (replaces native <select> dropdown list). */
+.asset-picker-pop .sel-search-item{padding:4px 10px;}
+.asset-picker-pop .sel-search-item.active{background:var(--surface2);}
+.asset-picker-pop .sel-search-item.active.selected{background:rgba(74,158,255,0.28);}
+/* Sticky "Clear" row above the search box — sets the field to None (Unreal-style). */
+.asset-picker-pop .sel-search-clear{display:flex;align-items:center;gap:6px;padding:6px 10px;cursor:pointer;color:var(--muted);border-bottom:1px solid var(--border);font-weight:500;user-select:none;}
+.asset-picker-pop .sel-search-clear:hover{background:var(--surface2);color:var(--text);}
+.asset-picker-pop .sel-search-clear.selected{background:rgba(74,158,255,0.15);color:var(--text);}
+.asset-picker-pop .sel-search-clear .ssc-x{font-size:10px;color:#e06666;}
 /* Fake-select button that replaces the native <select> for sound fields so
    clicking it opens our custom browser (which supports per-row previews). */
 .snd-combo{flex:1;min-width:0;display:flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:10px;padding:2px 4px 2px 6px;height:22px;border-radius:3px;cursor:pointer;text-align:left;font-family:inherit;}
@@ -627,8 +638,11 @@ body.global-mode .g-group-panel .g-chev:hover{background:rgba(224,85,85,0.12);bo
    positioning so it never affects the node's bounding box (packEdges /
    updateNodeHalo depend on a stable bbox). Sibling of .dupe-warn at top
    of the node. Amber to match .resp-notarget-warn visual language. */
-.branch-deadend-warn{display:flex;position:absolute;left:50%;transform:translateX(-50%);top:-12px;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;cursor:default;font-size:15px;color:#1a1408;background:var(--amber);font-weight:900;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.7),0 0 14px rgba(232,160,32,0.85);user-select:none;z-index:12;animation:warn-pulse 1.8s ease-in-out infinite;pointer-events:auto;}
-.branch-deadend-warn:hover{transform:scale(1.15);}
+.branch-deadend-warn{display:flex;position:absolute;left:50%;transform:translateX(-50%);top:-12px;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;cursor:default;font-size:15px;color:#1a1408;background:var(--amber);font-weight:900;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.7),0 0 14px rgba(232,160,32,0.85);user-select:none;z-index:12;animation:warn-pulse 1.8s ease-in-out infinite;pointer-events:auto;transition:transform 0.12s ease;transform-origin:center center;}
+/* PROTECTED — dead-end warn badge centered hover-expand, confirmed working 2026-06-03. Do not modify without explicit ask. */
+/* Keep the translateX(-50%) centering on hover so the badge expands in place
+   instead of jumping right (a bare scale() would drop the centering offset). */
+.branch-deadend-warn:hover{transform:translateX(-50%) scale(1.12);}
 .branch-deadend-warn.hidden{display:none;}
 #canvas-wrap.zoom-overview .branch-deadend-warn{width:calc(22px * clamp(1, var(--zoom-inv,1), 3)) !important;height:calc(22px * clamp(1, var(--zoom-inv,1), 3)) !important;font-size:calc(15px * clamp(1, var(--zoom-inv,1), 3)) !important;top:calc(-12px * clamp(1, var(--zoom-inv,1), 3)) !important;border-radius:calc(4px * clamp(1, var(--zoom-inv,1), 3)) !important;}
 .map-dupekey-warn{position:static;margin-left:6px;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:3px;cursor:pointer;font-size:12px;color:#1a1408;background:var(--amber);font-weight:700;line-height:1;box-shadow:0 0 0 1px rgba(232,160,32,0.4),0 0 12px rgba(232,160,32,0.5);user-select:none;transition:transform 0.1s;z-index:10;flex-shrink:0;}
@@ -734,6 +748,11 @@ body.global-mode .g-group-panel .g-chev:hover{background:rgba(224,85,85,0.12);bo
 /* Dimmed nodes when viewing actors with no DC */
 .gnode.dimmed{opacity:0.25;filter:grayscale(0.6);transition:opacity 0.18s, filter 0.18s;}
 .gnode.dimmed:hover{opacity:0.55;}
+/* Light dim for branches NOT connected to the currently focused/hovered branch.
+   Deliberately gentle (0.62) — the user wants unrelated NODES only slightly
+   dimmed, far less than the unrelated wires (which go to 0.12). The stronger
+   .dimmed (wrong-actor) state wins when both are present. */
+.gnode.focus-dim:not(.dimmed){opacity:0.62;transition:opacity 0.15s;}
 .g-group-panel.dimmed{opacity:0.3;filter:grayscale(0.6);transition:opacity 0.18s, filter 0.18s;}
 .g-group-panel.dimmed:hover{opacity:0.6;}
 /* Arrow indicator pointing from canvas to current actor's outliner row */
@@ -778,9 +797,9 @@ body.global-mode .g-group-panel .g-chev:hover{background:rgba(224,85,85,0.12);bo
     <span id="tidy-main" onclick="autoLayout()" style="padding:4px 10px;cursor:pointer;" title="Auto-layout in the selected direction">Tidy</span>
     <span id="tidy-chev" onclick="event.stopPropagation();showTidyMenu(event)" style="padding:4px 7px;border-left:1px solid rgba(0,0,0,0.35);cursor:pointer;" title="Pick layout direction">▾</span>
   </span>
-  <div id="tidy-menu" style="display:none;position:fixed;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px;z-index:9999;box-shadow:0 4px 18px rgba(0,0,0,0.5);min-width:180px;">
-    <div class="ctx-item" data-dir="h" onclick="setLayoutDir('h');hideTidyMenu();autoLayout();"><span class="td-check">☐</span> <span>Horizontal layout</span></div>
-    <div class="ctx-item" data-dir="v" onclick="setLayoutDir('v');hideTidyMenu();autoLayout();"><span class="td-check">☐</span> <span>Vertical layout</span></div>
+  <div id="tidy-menu" style="display:none;position:fixed;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px;z-index:9999;box-shadow:0 4px 18px rgba(0,0,0,0.5);">
+    <div class="ctx-item tidy-item" data-dir="h" onclick="setLayoutDir('h');hideTidyMenu();autoLayout();"><span class="td-check"></span><span>Horizontal</span></div>
+    <div class="ctx-item tidy-item" data-dir="v" onclick="setLayoutDir('v');hideTidyMenu();autoLayout();"><span class="td-check"></span><span>Vertical</span></div>
   </div>
   <button class="hbtn" onclick="previewDialogue()">Preview</button>
   <button class="hbtn" onclick="launchEUWFromBrowser(event)" title="Open the legacy Editor Utility Widget tab in Unreal (manual, won't auto-launch on every save)">EUW</button>
@@ -1018,14 +1037,41 @@ function cleanName(fullKey) {
   return c.trim();
 }
 
-// PROTECTED - do not modify without explicit request
+// PROTECTED — UE string escape/unescape round-trip, confirmed working 2026-06-03. Do not modify without explicit ask.
+// UE exports FString/FText values with C-style escapes inside the quotes:
+// newlines become \r\n, and " \ ' are backslash-escaped. The editor must DECODE
+// these on read so the fields show clean text ("Aw you're no fun!" not
+// "Aw you\'re no fun!"), and RE-ENCODE on write so the UE import stays valid.
+// Added per explicit request 2026-06-03.
+function _unescapeUEStr(s) {
+  if (typeof s !== 'string' || s.indexOf('\\') === -1) return s;
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '\\' && i + 1 < s.length) {
+      const n = s[++i];
+      out += n === 'n' ? '\n' : n === 'r' ? '\r' : n === 't' ? '\t' : n; // \\ \" \' -> the char itself
+    } else out += c;
+  }
+  return out;
+}
+function _escapeUEStr(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t');
+}
+
+// PROTECTED - do not modify without explicit request (str/nsloctext now un-escape on read — 2026-06-03)
 function parseVal(raw, key) {
   raw = raw.trim();
   // NSLOCTEXT
   if (raw.startsWith('NSLOCTEXT(')) {
     const inner = raw.slice('NSLOCTEXT('.length, -1);
     const params = extractQuotedParams(inner);
-    return { type: 'nsloctext', val: params[2] || '', ns: params[0] || '', textKey: params[1] || '' };
+    return { type: 'nsloctext', val: _unescapeUEStr(params[2] || ''), ns: params[0] || '', textKey: params[1] || '' };
   }
   // Boolean
   if (raw === 'True') return { type: 'bool', val: true };
@@ -1035,7 +1081,7 @@ function parseVal(raw, key) {
   // Number
   if (/^-?\d+(\.\d+)?$/.test(raw)) return { type: 'num', val: parseFloat(raw) };
   // Quoted string
-  if (raw.startsWith('"') && raw.endsWith('"')) return { type: 'str', val: raw.slice(1,-1) };
+  if (raw.startsWith('"') && raw.endsWith('"')) return { type: 'str', val: _unescapeUEStr(raw.slice(1,-1)) };
   // Asset reference: Type'"path"' or Type'"/path"'
   if (/^[A-Za-z]+'\s*"/.test(raw)) return { type: 'asset', val: raw };
   // Object: (key=val, ...) or wrapped value: (SomeValue)
@@ -1135,7 +1181,11 @@ function extractBranch(props, id) {
         const skipTo = getPropVal(respProps, 'Skip To Branch') || '';
         const endDia = getPropVal(respProps, 'End Dialogue') || getPropVal(respProps, 'EndDialogue') || false;
         const disableInt = getPropVal(respProps, 'Disable Interaction') || false;
-        return { text, branchSelection: branchSel, skipToBranch: skipTo, endDialogue: endDia, disableInteraction: disableInt, props: respProps };
+        // Default to COLLAPSED. A freshly pulled/parsed choice starts collapsed
+        // so the canvas stays tidy out of the box; only choices the user
+        // explicitly expanded re-open, via the _collapsed snapshot restored in
+        // the pull path (which overrides this default when a prior state exists).
+        return { text, branchSelection: branchSel, skipToBranch: skipTo, endDialogue: endDia, disableInteraction: disableInt, props: respProps, _collapsed: true };
       });
     }
   }
@@ -1184,7 +1234,7 @@ function _copyCheat(text, btn){
 // PROTECTED - do not modify without explicit request
 function serializeVal(p) {
   switch (p.type) {
-    case 'str': return '"' + (p.val||'') + '"';
+    case 'str': return '"' + _escapeUEStr(p.val||'') + '"';
     case 'num': {
       // UE exports int fields without decimals (Value=0) and float fields
       // with decimals (PlayRate=1.000000). Adding .000000 to ints corrupts
@@ -1196,7 +1246,7 @@ function serializeVal(p) {
     }
     case 'bool': return p.val ? 'True' : 'False';
     case 'none': return 'None';
-    case 'nsloctext': return `NSLOCTEXT("${p.ns||''}", "${p.textKey||genGUID()}", "${p.val||''}")`;
+    case 'nsloctext': return `NSLOCTEXT("${p.ns||''}", "${p.textKey||genGUID()}", "${_escapeUEStr(p.val||'')}")`;
     case 'asset': {
       if (!p.val) return 'None';
       // Class references (BlueprintGeneratedClass'...', WidgetBlueprintGeneratedClass'...')
@@ -1326,10 +1376,55 @@ function serializeVal(p) {
    STATE
    ═══════════════════════════════════════════════════════════════════════ */
 
+// PROTECTED — multi-tab dedup, confirmed working 2026-06-03. Do not modify without explicit ask.
+// ----- Multi-tab dedup (mirrors the DYLOUnrealEditor plugin) ----------------------------------
+// Each UE instance serves this editor on its own 127.0.0.1:<port>. When the user clicks the
+// toolbar button again while a tab is already open for that server, the C++ side just calls
+// LaunchURL and a second tab piles up. Coordinate over a per-host BroadcastChannel so a fresh
+// tab detects an already-open one, focuses it, and shows a small "already open" page (browsers
+// block window.close() on user-opened tabs, so we offer a button + Ctrl+W hint).
+(function setupTabDedup(){
+  if (typeof BroadcastChannel === 'undefined') return;
+  const ch = new BroadcastChannel('dce-editor-' + location.host);
+  const myId = Math.random().toString(36).slice(2);
+  let sawExisting = false;
+  ch.onmessage = (ev) => {
+    const m = ev.data || {};
+    if (m.id === myId) return;
+    if (m.type === 'hello') {
+      // We're an already-open tab. Announce ourselves and pull focus to this window.
+      ch.postMessage({ type: 'alreadyHere', id: myId });
+      try { window.focus(); } catch (_e) {}
+    } else if (m.type === 'alreadyHere') {
+      sawExisting = true;
+    }
+  };
+  ch.postMessage({ type: 'hello', id: myId });
+  // Brief wait, then if someone responded we're the duplicate.
+  setTimeout(() => {
+    if (!sawExisting) return;
+    document.title = 'Dialogue Editor (already open)';
+    document.documentElement.style.background = '#15151a';
+    document.body.innerHTML = `
+      <div style="font:14px/1.6 system-ui,'Segoe UI',sans-serif;color:#ddd;background:#15151a;
+                   min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:40px">
+        <div style="max-width:520px">
+          <h2 style="margin:0 0 12px;color:#fff;font-weight:600">Already open in another tab</h2>
+          <p style="color:#9aa">The Dialogue Editor is already open in another browser tab.
+             That tab has been focused &mdash; you can close this one.</p>
+          <p><button onclick="window.close()" style="background:#e8a020;color:#161616;border:0;padding:9px 18px;border-radius:6px;cursor:pointer;font:600 13px system-ui,sans-serif">Close this tab</button></p>
+          <p style="color:#666;font-size:11px">(If "Close this tab" doesn't work, your browser blocks programmatic close for user-opened tabs &mdash; close it manually with Ctrl+W.)</p>
+        </div>`;
+    try { window.close(); } catch (_e) {}
+  }, 350);
+})();
+
 let branches = [], connections = [];
 let nodeIdCounter = 0, editingNodeId = null;
 let _bridgeProjectName = ''; // declared early — _updateBridgeDot references it
 let selectedNodes = new Set(); // multi-select
+let _hoverNodeId = null; // branch the cursor is over — used to spotlight its wires
+let _lastFocusDimSig = null; // last applied focus-dim signature (avoids per-frame DOM churn)
 let canvasOffset = {x:60,y:60}, canvasScale = 1;
 let draggingNode = null, dragOff = {x:0,y:0}, dragMoved = false, dragStart = {x:0,y:0};
 let multiDragOrigins = {}; // {id: {x,y}} for multi-drag
@@ -1470,6 +1565,14 @@ function initCanvas(){
       e.preventDefault();
     }
   }, true); // capture phase — fires before node handlers can stopPropagation
+  // Track which branch the cursor is over so drawCanvas can spotlight its wires.
+  // Read-only/additive — does not alter the main onMouseMove drag/pan handling.
+  wrap.addEventListener('mousemove', function(e) {
+    if (isPanning || draggingNode != null || isBoxSelecting) return;
+    const g = e.target && e.target.closest ? e.target.closest('.gnode') : null;
+    _hoverNodeId = g ? parseInt(g.id.slice(3)) : null;
+  }, true);
+  wrap.addEventListener('mouseleave', function() { _hoverNodeId = null; }, true);
   // Suppress browser context menu and custom dropdowns when right-drag panning
   wrap.addEventListener('contextmenu', function(e) {
     if (_rightDragMoved) { e.preventDefault(); e.stopPropagation(); _rightDragMoved = false; }
@@ -1613,6 +1716,45 @@ function w2s(wx,wy){return{x:wx*canvasScale+canvasOffset.x,y:wy*canvasScale+canv
 // pushes nodes apart by exactly the same amount, so spacing stays clean.
 // Returns 1 at normal zoom so nothing moves when you're zoomed in.
 function _spread(){ return 1; }
+// PROTECTED — connection-line per-CHOICE coloring + hover/selection spotlight (glow on connected wires, dim-but-readable 0.4 on others), confirmed working 2026-06-03. Do not modify without explicit ask.
+// Connection-line palette. Each SOURCE branch gets a stable, distinct color so a
+// wire's color tells you which branch it leaves — far easier to trace than the old
+// single-amber scheme. darkenHex() yields the dimmer target-end of the gradient.
+const WIRE_PALETTE = ['#e8a020','#4fa3ff','#5fd17a','#c879e8','#ff6b6b','#36d6c2','#f5d442','#ff8c42','#a0d911','#9b8cff','#ff7eb6','#7ad1ff'];
+function wireColorHex(nodeId){
+  const idx = branches.findIndex(b => b.id === nodeId);
+  const k = idx >= 0 ? idx : Math.abs(nodeId|0);
+  return WIRE_PALETTE[k % WIRE_PALETTE.length];
+}
+// PROTECTED — per-choice unique colors (block + port + wire all match), confirmed working 2026-06-03. Do not modify without explicit ask.
+// Per-CHOICE color. Keyed by the choice's global position (sum of all earlier
+// branches' response counts + this response's index) so every choice gets its
+// own stable hue — even two choices in the SAME branch differ. The choice's
+// connecting wire and its on-node accent (port dot + left bar) all pull from
+// here, so a from-scratch graph shows varied colors immediately instead of
+// every wire leaving branch-0 as the same amber.
+function choiceGlobalIndex(nodeId, respIdx){
+  let count = 0;
+  for (const b of branches){
+    if (b.id === nodeId) return count + (respIdx|0);
+    count += (b.playerResponses||[]).length;
+  }
+  return count + (respIdx|0);
+}
+function choiceColorHex(nodeId, respIdx){
+  return WIRE_PALETTE[choiceGlobalIndex(nodeId, respIdx) % WIRE_PALETTE.length];
+}
+function darkenHex(hex, f){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return hex;
+  const n = parseInt(m[1],16);
+  const r = Math.round(((n>>16)&255)*f), g = Math.round(((n>>8)&255)*f), b = Math.round((n&255)*f);
+  return '#' + ((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+}
+function hexToRgba(hex, a){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return hex;
+  const n = parseInt(m[1],16);
+  return 'rgba(' + ((n>>16)&255) + ',' + ((n>>8)&255) + ',' + (n&255) + ',' + a + ')';
+}
 function drawLoop(){drawCanvas();requestAnimationFrame(drawLoop);}
 
 function drawCanvas(){
@@ -1641,19 +1783,25 @@ function drawCanvas(){
   }
 
   // Draw a right-angle routed line with gradient: bright at source → dimmer at target
-  function drawRoute(fp, tp, colorStart, colorEnd, alpha, dash, lane, targetCtx, sourceRight, targetLeft) {
+  function drawRoute(fp, tp, colorStart, colorEnd, alpha, dash, lane, targetCtx, sourceRight, targetLeft, lineWidth, glowColor) {
     const c = targetCtx || ctx;
     c.save();
-    c.lineWidth = 1.5;
+    c.lineWidth = lineWidth || 1.5;
     c.globalAlpha = alpha;
     if (dash) c.setLineDash(dash);
     c.lineJoin = 'round';
     c.lineCap = 'round';
+    // Optional glow — used to make a focused branch's connected wires pop out
+    // beyond just being brighter/thicker than the dimmed ones.
+    if (glowColor) { c.shadowColor = glowColor; c.shadowBlur = 9 * canvasScale; }
 
-    // Per-lane offset + shade so multiple wires leaving the same node are
-    // visually distinct instead of stacked on top of each other.
+    // Per-lane OFFSET keeps multiple wires leaving the same node from stacking
+    // on top of each other. Per-lane SHADE is intentionally disabled (=1): each
+    // choice now has its own unique palette color, so darkening by lane would
+    // make a choice's wire NOT match its on-node color block. Keeping shade off
+    // guarantees wire color === the choice's block/port color exactly.
     const laneOffset = ((lane|0) % 6) * 12 * canvasScale; // px offset along the vertical run
-    const laneShade = lane != null ? (1 - Math.min(0.5, (lane|0) * 0.12)) : 1; // darken per lane
+    const laneShade = 1; // no per-lane darkening — preserve exact choice color
 
     // Build the path points
     const gap = 24 * canvasScale;
@@ -1725,7 +1873,7 @@ function drawCanvas(){
     if (!dash) {
       c.globalAlpha = Math.min(1, alpha * 1.3);
       c.fillStyle = colorEnd;
-      const as = 6;
+      const as = 5 + (c.lineWidth || 1.5) * 1.4;
       c.beginPath();
       c.moveTo(tp.x, tp.y);
       c.lineTo(tp.x - as, tp.y - as * 0.45);
@@ -1753,15 +1901,61 @@ function drawCanvas(){
     const canvasRect = canvas.getBoundingClientRect();
     return el.getBoundingClientRect().left - canvasRect.left;
   }
-  // Draw connections on the main canvas (behind panels).
-  for (const conn of connections) {
+  // Draw connections on the main canvas (behind panels). Each wire is colored by
+  // its SOURCE branch so you can follow it; when a branch is hovered or selected,
+  // its wires are spotlighted (brighter + thicker) and the rest dim back so the
+  // focused branch's connections stand out. Dimmed wires draw first, focused last,
+  // so the highlighted ones always sit on top.
+  const _focus = new Set();
+  if (_hoverNodeId != null) _focus.add(_hoverNodeId);
+  if (selectedNodes) for (const id of selectedNodes) _focus.add(id);
+  const _hasFocus = _focus.size > 0;
+  // PROTECTED — focus dimming (unrelated wires 0.12, unrelated nodes lightly dimmed 0.62), confirmed working 2026-06-03. Do not modify without explicit ask.
+  // Lightly dim the branch NODES that aren't connected to the focused branch
+  // (focus + its direct wire partners stay full-bright). drawCanvas runs every
+  // frame, so only touch the DOM when the connected-set signature changes.
+  {
+    const _connected = new Set(_focus);
+    if (_hasFocus) for (const conn of connections) {
+      if (_focus.has(conn.fromId)) _connected.add(conn.toId);
+      if (_focus.has(conn.toId)) _connected.add(conn.fromId);
+    }
+    const _sig = _hasFocus ? [..._connected].sort((a,b)=>a-b).join(',') : '';
+    if (_sig !== _lastFocusDimSig) {
+      _lastFocusDimSig = _sig;
+      for (const b of branches) {
+        const el = document.getElementById('gn-' + b.id);
+        if (el) el.classList.toggle('focus-dim', _hasFocus && !_connected.has(b.id));
+      }
+    }
+  }
+  const _drawConn = (conn, emphasize) => {
     const fromB = branches.find(b => b.id === conn.fromId), toB = branches.find(b => b.id === conn.toId);
-    if (!fromB || !toB) continue;
+    if (!fromB || !toB) return;
     const fe = document.getElementById('gn-' + conn.fromId), te = document.getElementById('gn-' + conn.toId);
-    if (!fe || !te) continue;
+    if (!fe || !te) return;
     const sourceRight = nodeRightEdge(fe);
     const targetLeft = nodeLeftEdge(te);
-    drawRoute(getOutPort(fromB, fe, conn.fromRespIdx), getInPort(toB), '#e8a020', '#a07010', 0.75, null, conn.fromRespIdx, null, sourceRight, targetLeft);
+    const col = choiceColorHex(conn.fromId, conn.fromRespIdx);
+    const colEnd = darkenHex(col, 0.5);
+    // When a branch is focused: connected wires stay full-bright + thicker AND
+    // get a colored glow so they clearly pop. Non-connected wires drop right
+    // back (0.12) so the focused branch's wires read unambiguously — the user
+    // wants the unrelated lines dark, much darker than the lightly-dimmed nodes.
+    const alpha = !_hasFocus ? 0.85 : (emphasize ? 1.0 : 0.12);
+    const lw = (!_hasFocus ? 1.6 : (emphasize ? 3.2 : 1.4));
+    const glow = (_hasFocus && emphasize) ? col : null;
+    drawRoute(getOutPort(fromB, fe, conn.fromRespIdx), getInPort(toB), col, colEnd, alpha, null, conn.fromRespIdx, null, sourceRight, targetLeft, lw, glow);
+  };
+  for (const conn of connections) {
+    const involved = _focus.has(conn.fromId) || _focus.has(conn.toId);
+    if (_hasFocus && involved) continue; // focused wires drawn in the second pass (on top)
+    _drawConn(conn, false);
+  }
+  if (_hasFocus) {
+    for (const conn of connections) {
+      if (_focus.has(conn.fromId) || _focus.has(conn.toId)) _drawConn(conn, true);
+    }
   }
   // Overlay ghost pass removed — wires behind panels are now fully hidden
   // (user wanted the faint duplicate line gone). Clear the overlay canvas
@@ -1807,8 +2001,8 @@ function onCanvasDown(e){
   if(e.button===0){
     if(connectingFrom){connectingFrom=null;return;}
     // Start box selection on empty canvas. Don't clear selection on mousedown —
-    // we only replace it when a REAL box drag resolves (handled in onMouseUp),
-    // so a bare click on empty canvas leaves the current branch highlighted.
+    // onMouseUp decides: a REAL box drag replaces the selection, while a bare
+    // click (no drag) deselects/unfocuses the current branch (like Esc).
     const rect=canvas.getBoundingClientRect();
     isBoxSelecting=true;
     _boxShiftHeld=!!e.shiftKey;
@@ -1899,6 +2093,16 @@ function onMouseUp(e){
         if (hit) selectedNodes.add(b.id);
       }
       renderAll();
+    } else if (!_boxShiftHeld) {
+      // PROTECTED — single click on empty canvas deselects like Esc, confirmed working 2026-06-03. Do not modify without explicit ask.
+      // Bare single click on empty canvas (no real drag) → unfocus/deselect the
+      // current branch, same as pressing Esc on the canvas. Shift-click is left
+      // alone so it can keep building an additive selection.
+      if (selectedNodes.size || editingNodeId !== null) {
+        selectedNodes.clear();
+        editingNodeId = null;
+        renderAll();
+      }
     }
     return;
   }
@@ -1971,7 +2175,10 @@ function showCtxMenu(sx,sy,wx,wy){
     <div class="ctx-item${hasCb?'':'" style="color:var(--muted2);pointer-events:none'}" onclick="pasteAt(${wx},${wy});hideCtxMenu()">Paste (${hasCb?_clipboard.length+' branch'+((_clipboard.length>1?'es':'')):'empty'})</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" onclick="autoLayout();hideCtxMenu()">Auto Layout</div>
-    <div class="ctx-item" onclick="zoomFit();hideCtxMenu()">Zoom to Fit</div>`;
+    <div class="ctx-item" onclick="zoomFit();hideCtxMenu()">Zoom to Fit</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" onclick="setAllBranchesCollapsed(false);hideCtxMenu()">Expand All Branches</div>
+    <div class="ctx-item" onclick="setAllBranchesCollapsed(true);hideCtxMenu()">Collapse All Branches</div>`;
   menu.style.cssText=`display:block;left:${sx}px;top:${sy}px;`;
   setTimeout(()=>document.addEventListener('click',hideCtxMenu,{once:true}),10);
 }
@@ -2049,6 +2256,23 @@ function toggleNodeCollapsed(branchId) {
   }
   // Full re-render fixes all panel spacing issues
   renderAll();
+}
+// Collapse/expand the settings panels of EVERY branch at once. Mirrors
+// toggleNodeCollapsed's per-branch behavior (collapsing also collapses that
+// branch's choices) so a "collapse all" leaves the canvas fully tidied.
+function setAllBranchesCollapsed(collapsed) {
+  if (!branches.length) { setStatus('No branches'); return; }
+  for (const b of branches) {
+    panelsOpen[b.id] = !collapsed;
+    // Drive the choices in BOTH directions so the two commands are symmetric:
+    // Collapse All fully tidies (every choice closed), Expand All fully opens
+    // (every choice's settings shown). Previously Expand All only opened the
+    // node panel and left choices collapsed, which reads as "didn't expand".
+    for (const r of (b.playerResponses || [])) r._collapsed = collapsed;
+  }
+  savePanelsOpen();
+  renderAll();
+  setStatus(collapsed ? 'Collapsed all branches' : 'Expanded all branches');
 }
 try {
   if (!localStorage.getItem('ue_dia_collapsed_allmigrated')) {
@@ -3151,12 +3375,16 @@ function buildNodeHTML(b, el) {
       const _npcRotVal  = (_npcRotProp && _npcRotProp.val) || r.npcRotation || 'None';
       const _NPC_ROT_OPTIONS = ['None','Rotate NPC To Original Direction'];
       const _noTarget = !r.endDialogue && !(r.branchSelection||'').trim();
+      // Per-choice color — same hue the connecting wire uses, surfaced on the
+      // row (left bar) + output port so it reads even before the choice is wired.
+      // PROTECTED — choice row fully tinted to its wire/pin color (bg+border+bar), confirmed working 2026-06-03. Do not modify without explicit ask.
+      const _choiceCol = choiceColorHex(b.id, i);
       return `<div class="gnode-resp ${rCollapsed?'resp-collapsed':''}${_noTarget?' resp-warn-pulse':''}" data-resp-idx="${i}"
         ondragover="onRespDragOver(event,this)"
         ondragleave="this.classList.remove('drag-over-above','drag-over-below')"
         ondrop="onRespDrop(event,${b.id},${i})"
         ondragend="Array.from(document.querySelectorAll('.gnode-resp')).forEach(el=>el.classList.remove('drag-over-above','drag-over-below'))"
-        style="padding:0;" onmousedown="event.stopPropagation()"
+        style="padding:0;box-shadow:inset 3px 0 0 ${_choiceCol};background:${hexToRgba(_choiceCol,0.14)};border-color:${hexToRgba(_choiceCol,0.55)};" onmousedown="event.stopPropagation()"
         oncontextmenu="event.preventDefault();event.stopPropagation();showChoiceCtxMenu(event,${b.id},${i});return false;"
         tabindex="0"
         onkeydown="if((event.key==='Delete'||event.key==='Backspace')&&!event.target.closest('input,textarea,select')){event.preventDefault();event.stopPropagation();removeResp(${b.id},${i});}">
@@ -3201,7 +3429,7 @@ function buildNodeHTML(b, el) {
             ${choiceSettings}
           </div>
         </div>
-        <div class="port port-out port-out-${i}" draggable="false" style="right:-7px;position:absolute;top:10px;"
+        <div class="port port-out port-out-${i}" draggable="false" style="right:-7px;position:absolute;top:10px;background:${_choiceCol};border-color:${darkenHex(_choiceCol,0.55)};"
           onmousedown="event.stopPropagation();event.preventDefault();onPortOutClick(event,${b.id},${i})"
           onmouseup="if(connectingFrom&&connectingFrom.reverse)onPortOutClick(event,${b.id},${i})"
           ondragstart="event.preventDefault();return false"
@@ -3586,6 +3814,29 @@ function renderProp(p, depth, branchId, parentPath) {
   }
   if (['Specific Camera','NPC Location To Move','Actor To Activate','Spawn To Actor'].includes(_sfn)) {
     const current = (p.type === 'none') ? '' : _cleanAssetPath(String(p.val||''));
+    // PROTECTED — actor-ref dropdown selected-state matching (Specific Camera etc.), confirmed working 2026-06-03. Do not modify without explicit ask.
+    // Actor references arrive from UE wrapped as `Class'/Game/Map.Map:PersistentLevel.Name'`.
+    // _cleanAssetPath truncates at the ':' (its char class excludes colon), dropping the
+    // actor name — which made the dropdown fail to match its own value and show "None".
+    // Strip ONLY the class wrapper here so the colon-path survives for matching.
+    const _refPath = (() => {
+      if (p.type === 'none') return '';
+      let s = String(p.val||'').trim();
+      s = s.replace(/^[A-Za-z0-9_]+'/, '').replace(/'$/, '');
+      s = s.replace(/^"/, '').replace(/"$/, '');
+      return s.trim();
+    })();
+    // Resolve to exactly one matching actor index (precise path match first, then
+    // legacy label/cleaned-path fallbacks) so we never emit two `selected` options.
+    let _selIdx = -1;
+    if (_refPath) {
+      _selIdx = _levelActors.findIndex(a => a.path && (_refPath === a.path || _refPath.includes(a.path)));
+      if (_selIdx < 0) _selIdx = _levelActors.findIndex(a => a.label && _refPath === a.label);
+      if (_selIdx < 0) _selIdx = _levelActors.findIndex(a => a.label && _refPath.includes(a.label));
+    }
+    if (_selIdx < 0 && current) {
+      _selIdx = _levelActors.findIndex(a => (a.label && current.includes(a.label)) || (a.path && current.includes(a.path)));
+    }
     const isCameraField = _sfn === 'Specific Camera';
     // Color by actor class
     const classColor = (cls) => {
@@ -3598,8 +3849,8 @@ function renderProp(p, depth, branchId, parentPath) {
       if (c === 'WorldDataLayers' || c === 'PostProcessVolume' || c === 'SkyAtmosphere' || c === 'VolumetricCloud') return '#666';
       return '';
     };
-    const opts = '<option value="">None</option>' + _levelActors.map(a => {
-      const sel = (current && (current.includes(a.label) || current.includes(a.path))) ? 'selected' : '';
+    const opts = '<option value="">None</option>' + _levelActors.map((a, _ai) => {
+      const sel = (_ai === _selIdx) ? 'selected' : '';
       const color = classColor(a.class);
       const hi = isCameraField && a.has_camera;
       const style = [
@@ -4730,6 +4981,14 @@ function updateAllNodeHalos() {
 let _wasFocusedOnDown = false;
 function onNodeUp(e,id){
   e.stopPropagation();
+  // PROTECTED — right-click-header stuck-pan fix, confirmed working 2026-06-03. Do not modify without explicit ask.
+  // A right/middle-click that lands on this header sets isPanning via the
+  // capture-phase pan handler on #canvas-wrap. Because we stopPropagation() the
+  // mouseup here, the document-level onMouseUp that normally clears isPanning
+  // never runs — so after the context menu opens the canvas stays stuck panning.
+  // Clear the pan state (and persist the offset, like onMouseUp would) so a
+  // plain right-click on a header just shows the menu and nothing drags.
+  if (isPanning) { isPanning = false; if (document.exitPointerLock) document.exitPointerLock(); saveState(); }
   // If the user dragged the node, persist the new position immediately.
   // onNodeUp calls stopPropagation() which blocks the document-level
   // mouseup handler, so without this save the move only lives in memory
@@ -5186,6 +5445,7 @@ function _cascadeDeleteRefs(victimNames) {
     }
   }
 }
+// PROTECTED — deletes push to UE via _directBranchPush (bypasses the anti-wipe empty guard so Alt+R can't resurrect deleted branches), confirmed working 2026-06-03. Do not modify without explicit ask.
 function deleteBranch(id) {
   pushHistory();
   const victim = branches.find(b => b.id === id);
@@ -5196,6 +5456,12 @@ function deleteBranch(id) {
   if (editingNodeId === id) editingNodeId = null;
   selectedNodes.delete(id);
   renderAll();
+  // Push the deletion OUTWARD. A deliberate delete must reach UE even when it
+  // leaves the canvas near-empty (e.g. only START left), so use the direct push
+  // which bypasses bridgeLiveTrigger's empty-content guard. That guard exists to
+  // stop a blank/refreshing canvas from wiping UE — it must NOT swallow an
+  // intentional delete, or Alt+R just pulls the removed branches right back.
+  _directBranchPush();
 }
 function deleteSelected() {
   const ids = [...selectedNodes];
@@ -5207,6 +5473,10 @@ function deleteSelected() {
   _cascadeDeleteRefs(victimNames);
   editingNodeId = null; selectedNodes.clear(); renderAll();
   setStatus('Deleted ' + ids.length + ' branch(es).');
+  // See deleteBranch: push the deletion via the direct path so it reaches UE
+  // even when few/empty branches remain (bypasses the anti-wipe empty guard,
+  // which is only meant to block refresh/blank-canvas pushes, not real deletes).
+  _directBranchPush();
 }
 
 function rebuildConnections() {
@@ -5829,12 +6099,14 @@ function _updateTidyMenuUI() {
     el.style.fontWeight = on ? '700' : '400';
     el.style.color = on ? 'var(--blue)' : '';
     const chk = el.querySelector('.td-check');
-    if (chk) chk.textContent = on ? '☑' : '☐';
+    if (chk) chk.textContent = on ? '✓' : '';
   });
 }
 function showTidyMenu(e) {
   const menu = document.getElementById('tidy-menu'); if (!menu) return;
-  const anchor = document.getElementById('tidy-chev');
+  // Align the menu's left border with the left of the "Tidy" button, not the
+  // chevron, so it reads as a dropdown of the whole control.
+  const anchor = document.getElementById('tidy-main') || document.getElementById('tidy-chev');
   if (!anchor) return;
   const r = anchor.getBoundingClientRect();
   menu.style.display = 'block';
@@ -5860,6 +6132,7 @@ function setLayoutDir(dir){
    AUTO LAYOUT
    ═══════════════════════════════════════════════════════════════════════ */
 
+// PROTECTED — layered (column-per-depth) Tidy layout matching the wire-draw rule, confirmed working 2026-06-03. Do not modify without explicit ask.
 function autoLayout(){
   if(!branches.length)return;pushHistory();
   const isV=_layoutDir==='v';
@@ -5901,60 +6174,87 @@ function autoLayout(){
   // Restore zoom-overview class after measurement
   if (_alHadOverview && _alWrap) _alWrap.classList.add('zoom-overview');
 
-  // Compute subtree cross-axis size (how tall/wide a branch + its children need)
-  const _subtreeCache={};
-  function subtreeSize(b, seen){
-    if(!b||seen.has(b.id))return isV?nodeW[b.id]:nodeH[b.id];
-    if(_subtreeCache[b.id]!=null)return _subtreeCache[b.id];
-    seen.add(b.id);
-    const children=[];
-    for(const r of(b.playerResponses||[])){
-      if(r.endDialogue||!r.branchSelection)continue;
-      const target=branches.find(t=>t.branchName===r.branchSelection&&t.id!==b.id);
-      if(target&&!seen.has(target.id))children.push(target);
+  // ── Layered (column-per-depth) layout ──────────────────────────────────
+  // Treat the dialogue as a DAG: each reachable branch gets a column = its
+  // BFS depth from START, then branches within a column are stacked along the
+  // cross axis. Columns stay crisp (clean left→right reading, START alone in
+  // the leftmost column) and overlap is impossible even when zoomed out: every
+  // column is a band at least as wide as its widest node, and nodes inside a
+  // column are stacked with built-in gaps. (The previous subtree-sum tree
+  // layout double-counted shared branches in converging graphs, which both
+  // ballooned the spacing and let sibling subtrees land on top of each other.)
+  const COL_GAP = isV ? 60 : 80; // gap along the main (flow) axis between columns
+  const byName = {};
+  for (const b of branches) { if (b.branchName && !(b.branchName in byName)) byName[b.branchName] = b; }
+  function childrenOf(b) {
+    const out = [], seenLocal = new Set();
+    for (const r of (b.playerResponses || [])) {
+      // Follow the SAME rule rebuildConnections() uses to draw a wire: any
+      // response whose Branch Selection resolves to a real branch is an edge —
+      // even if End Dialogue is also set (a response can both end and point at
+      // a branch, and the editor draws that line). Matching the rule keeps the
+      // layout consistent with the visible wires, so a wired branch is placed
+      // beside its parent instead of being mistaken for an orphan.
+      if (!r.branchSelection) continue;
+      const t = byName[r.branchSelection];
+      if (t && t.id !== b.id && !seenLocal.has(t.id)) { seenLocal.add(t.id); out.push(t); }
     }
-    if(!children.length){_subtreeCache[b.id]=isV?nodeW[b.id]:nodeH[b.id];return _subtreeCache[b.id];}
-    const childTotal=children.reduce((s,c)=>s+subtreeSize(c,new Set(seen)),0);
-    _subtreeCache[b.id]=Math.max(isV?nodeW[b.id]:nodeH[b.id], childTotal);
-    return _subtreeCache[b.id];
+    return out;
   }
 
-  const COL_GAP=isV?60:80; // gap along main axis between columns
-
-  function placeTree(b, mainPos, crossStart){
-    if(!b||placed.has(b.id))return;
-    placed.add(b.id);
-    const mySize=subtreeSize(b,new Set());
-    // Center this node in its allocated cross-axis space
-    const selfSize=isV?nodeW[b.id]:nodeH[b.id];
-    const offset=(mySize-selfSize)/2;
-
-    if(isV){b.x=crossStart+offset;b.y=mainPos;}
-    else   {b.x=mainPos;b.y=crossStart+offset;}
-
-    // Place children
-    const mainNext=mainPos+(isV?(nodeH[b.id]+COL_GAP):(nodeW[b.id]+COL_GAP));
-    let childCross=crossStart;
-    for(const r of(b.playerResponses||[])){
-      if(r.endDialogue||!r.branchSelection)continue;
-      const target=branches.find(t=>t.branchName===r.branchSelection&&t.id!==b.id);
-      if(target&&!placed.has(target.id)){
-        const cs=subtreeSize(target,new Set());
-        placeTree(target,mainNext,childCross);
-        childCross+=cs;
+  // BFS from START → column index per branch (cycle-safe: each visited once).
+  const col = {}, order = [];
+  {
+    let frontier = [start]; col[start.id] = 0; placed.add(start.id); order.push(start);
+    while (frontier.length) {
+      const next = [];
+      for (const b of frontier) {
+        for (const c of childrenOf(b)) {
+          if (!placed.has(c.id)) { placed.add(c.id); col[c.id] = col[b.id] + 1; next.push(c); order.push(c); }
+        }
       }
+      frontier = next;
     }
   }
-  placeTree(start, 40, 40);
 
-  // Place orphans below/right of the tree
-  let orphanPos=0;
-  branches.filter(b=>placed.has(b.id)).forEach(b=>{orphanPos=Math.max(orphanPos,isV?b.y+nodeH[b.id]:b.y+nodeH[b.id]);});
-  orphanPos+=60;
-  branches.forEach(b=>{if(!placed.has(b.id)){
-    b.x=40; b.y=orphanPos;
-    orphanPos+=(nodeH[b.id]||250);
-  }});
+  // Bucket branches by column, preserving discovery order so children stay
+  // grouped under their parents (fewer edge crossings).
+  const cols = [];
+  for (const b of order) { const L = col[b.id]; (cols[L] || (cols[L] = [])).push(b); }
+
+  const mainSize  = b => isV ? nodeH[b.id] : nodeW[b.id]; // size along the flow axis
+  const crossSize = b => isV ? nodeW[b.id] : nodeH[b.id]; // size along the stacking axis
+
+  // Main-axis coordinate of each column = cumulative max main-size + gaps.
+  const colMain = []; let acc = 40;
+  for (let L = 0; L < cols.length; L++) {
+    colMain[L] = acc;
+    const maxMain = cols[L].reduce((m, b) => Math.max(m, mainSize(b)), 0);
+    acc += maxMain + COL_GAP;
+  }
+
+  // Center every column on the tallest one so the graph reads balanced and
+  // START sits centered in the leftmost column.
+  const crossTotal = cols.map(c => c.reduce((s, b) => s + crossSize(b), 0));
+  const maxCross = crossTotal.reduce((m, v) => Math.max(m, v), 0);
+  for (let L = 0; L < cols.length; L++) {
+    let cross = 40 + (maxCross - crossTotal[L]) / 2;
+    for (const b of cols[L]) {
+      if (isV) { b.y = colMain[L]; b.x = cross; }
+      else     { b.x = colMain[L]; b.y = cross; }
+      cross += crossSize(b); // crossSize already includes PAD → built-in gap
+    }
+  }
+
+  // Place orphans (branches START can't reach) below the laid-out graph.
+  let maxBottom = 0;
+  for (const b of branches) { if (placed.has(b.id)) maxBottom = Math.max(maxBottom, b.y + (nodeH[b.id] || 0)); }
+  let orphanPos = maxBottom + 60;
+  for (const b of branches) {
+    if (placed.has(b.id)) continue;
+    b.x = 40; b.y = orphanPos;
+    orphanPos += (nodeH[b.id] || 250);
+  }
 
   repositionAll();saveState();setStatus('Layout applied.');
 }
@@ -7306,11 +7606,19 @@ async function bridgePullSelected(force) {
   bridgeFetch('/refresh_euw', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
   const r = await bridgeFetch('/selected');
   if (!r.ok || !r.actor) {
-    // Clear graph — nothing selected in UE
+    // PROTECTED — refresh-inward-only clear path (cancel+suppress before clearing so no outward wipe), confirmed working 2026-06-03. Do not modify without explicit ask.
+    // Clear graph — nothing selected in UE. Refresh is INWARD ONLY: cancel any
+    // queued live-push and suppress new ones BEFORE clearing, otherwise the
+    // pushHistory() below fires bridgeLiveTrigger and an empty graph gets
+    // pushed back out to the last actor, wiping its dialogue.
+    bridgeCancelPendingPush();
+    _bridgeSuppressLive = Date.now();
     pushHistory();
     branches = []; connections = []; nodeIdCounter = 0;
     editingNodeId = null; selectedNodes.clear();
     renderAll();
+    _bridgeSuppressLive = 0;
+    bridgeCancelPendingPush();
     document.getElementById('paste-hint').style.display = '';
     setStatus('No actor with Dialogue_Component selected in UE — graph cleared');
     showToast('Cleared (no DC actor selected)');
@@ -7374,18 +7682,28 @@ function _applyPulledData(actor, text, cachedVars) {
   // collapse choices survive a pull/reload.
   const _prevCollapseMap = {};
   const _prevBound = {};
+  const _prevPanelsOpen = {}; // by branchName — node settings open/closed survive a pull
   for (const ob of branches) {
     if (ob._boundAsStart) _prevBound[ob.branchName] = true;
     const key = ob.branchName || '';
     _prevCollapseMap[key] = (ob.playerResponses || []).map(r => !!r._collapsed);
+    if (panelsOpen[ob.id]) _prevPanelsOpen[key] = true;
   }
   branches = []; connections = []; nodeIdCounter = 0;
   for (const props of parsed) { branches.push(extractBranch(props, ++nodeIdCounter)); }
   normalizeBranches();
-  // Restore per-choice _collapsed + _boundAsStart from snapshot.
+  // Restore per-choice _collapsed + _boundAsStart from snapshot. extractBranch
+  // already defaults every choice to collapsed, so a choice only re-opens when
+  // the snapshot says the user had it open — this is what makes a fresh pull
+  // (or a deselect → reselect with no prior state) come back fully collapsed.
+  const _newPanelsOpen = {};
   for (const nb of branches) {
     const key = nb.branchName || '';
     if (_prevBound[key]) nb._boundAsStart = true;
+    // Node settings default CLOSED; only re-open if the user had this branch
+    // open before the pull. Rebuilding the map by NEW id also drops stale
+    // id-keyed entries that used to leak a previous graph's open state.
+    if (_prevPanelsOpen[key]) _newPanelsOpen[nb.id] = true;
     const prevArr = _prevCollapseMap[key];
     if (prevArr) {
       for (let ri = 0; ri < (nb.playerResponses || []).length; ri++) {
@@ -7393,6 +7711,7 @@ function _applyPulledData(actor, text, cachedVars) {
       }
     }
   }
+  panelsOpen = _newPanelsOpen; savePanelsOpen();
   rebuildConnections();
   editingNodeId = null; selectedNodes.clear();
   // Restore selection by name.
@@ -7940,6 +8259,116 @@ function showAssetPicker(e, uid, fieldName, onSelectCb) {
   const close = (ev) => { if (!pop.contains(ev.target) && ev.target !== triggerBtn) { pop.remove(); document.removeEventListener('mousedown', close, true); } };
   setTimeout(() => document.addEventListener('mousedown', close, true), 0);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// GENERIC SEARCHABLE <select> — every native dropdown in the editor opens a
+// filterable popup whose search box auto-focuses, so the user can type to
+// narrow long actor/asset/enum lists instead of scrolling. The native popup
+// is suppressed (Chrome: preventDefault on the select's mousedown) and we
+// drive the real <select> value + dispatch 'change' so all existing onchange
+// handlers keep working untouched. Opt a select out with data-no-search="1".
+// Nullable fields also get a sticky "Clear" row (Unreal-style) above search.
+// PROTECTED — searchable dropdown + sticky Clear row, confirmed working 2026-06-03. Do not modify without explicit ask.
+// ═══════════════════════════════════════════════════════════════════════
+let _selSearchPop = null;
+function _closeSelectSearch() {
+  if (_selSearchPop) { _selSearchPop.remove(); _selSearchPop = null; }
+  document.removeEventListener('mousedown', _selSearchOutside, true);
+}
+function _selSearchOutside(ev) {
+  if (_selSearchPop && !_selSearchPop.contains(ev.target)) _closeSelectSearch();
+}
+function openSelectSearch(sel) {
+  _closeSelectSearch();
+  const options = Array.from(sel.options);
+  const rect = sel.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'asset-picker-pop sel-search-pop';
+  const popW = Math.max(rect.width, 200);
+  const popH = 360;
+  let left = rect.left, top = rect.bottom + 2;
+  if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+  if (left < 8) left = 8;
+  if (top + popH > window.innerHeight - 8) top = Math.max(8, rect.top - popH - 2);
+  pop.style.left = left + 'px'; pop.style.top = top + 'px'; pop.style.width = popW + 'px';
+  // Nullable fields (those carrying a None/empty option) get a sticky "Clear"
+  // row pinned above the search box, mirroring Unreal's object-picker Clear.
+  const clearIdx = options.findIndex(o => o.value === '' || (o.textContent || '').trim().toLowerCase() === 'none');
+  const clearRow = clearIdx >= 0
+    ? `<div class="sel-search-clear" title="Clear selection (set to None)"><span class="ssc-x">✕</span> Clear</div>`
+    : '';
+  pop.innerHTML = `${clearRow}<div class="ap-search"><input type="text" placeholder="Type to filter..."></div><div class="ap-list sel-search-list"></div>`;
+  document.body.appendChild(pop);
+  _selSearchPop = pop;
+  const input = pop.querySelector('input');
+  const listEl = pop.querySelector('.sel-search-list');
+  let visible = [];   // [{o, i}] currently shown, in option order
+  let activeIdx = -1; // index into `visible` for keyboard highlight
+
+  function commit(optIdx) {
+    if (optIdx == null || optIdx < 0) return;
+    if (sel.selectedIndex !== optIdx) {
+      sel.selectedIndex = optIdx;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    _closeSelectSearch();
+  }
+  function highlight() {
+    const rows = listEl.querySelectorAll('.sel-search-item');
+    rows.forEach((el, vi) => el.classList.toggle('active', vi === activeIdx));
+    const act = rows[activeIdx];
+    if (act) act.scrollIntoView({ block: 'nearest' });
+  }
+  function build(term) {
+    const t = (term || '').toLowerCase();
+    visible = options
+      .map((o, i) => ({ o, i }))
+      .filter(({ o, i }) => i !== clearIdx && (!t || (o.textContent || '').toLowerCase().includes(t)));
+    listEl.innerHTML = visible.map(({ o, i }) => {
+      const selCls = (i === sel.selectedIndex) ? ' selected' : '';
+      const col = (o.style && o.style.color) ? `color:${o.style.color};` : '';
+      return `<div class="ap-item sel-search-item${selCls}" data-oi="${i}" style="${col}" title="${h(o.textContent)}"><div class="ap-item-info"><div class="ap-item-name">${h(o.textContent)}</div></div></div>`;
+    }).join('');
+    listEl.querySelectorAll('[data-oi]').forEach(row => {
+      // preventDefault on mousedown keeps focus in the search box (no blur-close race)
+      row.addEventListener('mousedown', e => e.preventDefault());
+      row.addEventListener('click', () => commit(parseInt(row.dataset.oi, 10)));
+    });
+    activeIdx = visible.findIndex(({ i }) => i === sel.selectedIndex);
+    if (activeIdx < 0 && visible.length) activeIdx = 0;
+    highlight();
+  }
+  input.addEventListener('input', () => build(input.value));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (activeIdx < visible.length - 1) { activeIdx++; highlight(); } }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (activeIdx > 0) { activeIdx--; highlight(); } }
+    else if (e.key === 'Enter') { e.preventDefault(); if (visible[activeIdx]) commit(visible[activeIdx].i); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _closeSelectSearch(); }
+  });
+  // Closing on blur (Tab/Esc) — delayed so an item click commits first.
+  input.addEventListener('blur', () => setTimeout(() => {
+    if (_selSearchPop === pop && !pop.contains(document.activeElement)) _closeSelectSearch();
+  }, 150));
+  // Sticky Clear row: commit the None/empty option without losing search focus.
+  const clearEl = pop.querySelector('.sel-search-clear');
+  if (clearEl) {
+    if (sel.selectedIndex === clearIdx) clearEl.classList.add('selected');
+    clearEl.addEventListener('mousedown', e => e.preventDefault());
+    clearEl.addEventListener('click', () => commit(clearIdx));
+  }
+  build('');
+  input.focus();
+  setTimeout(() => document.addEventListener('mousedown', _selSearchOutside, true), 0);
+}
+// Intercept the native dropdown opening. Capture phase so we run before the
+// inline onmousedown="event.stopPropagation()" guards many selects carry.
+document.addEventListener('mousedown', e => {
+  const sel = e.target.closest ? e.target.closest('select') : null;
+  if (!sel || sel.disabled || sel.multiple || sel.dataset.noSearch === '1') return;
+  e.preventDefault(); // suppress the native popup (Chrome)
+  openSelectSearch(sel);
+}, true);
+
 function updateTextureThumb(uid, value) {
   const img = document.getElementById('tex_thumb_' + uid);
   if (!img) return;
@@ -8183,6 +8612,16 @@ function bridgeLiveTrigger() {
       console.warn('[Live push aborted] queued for', _bridgeQueuedActor, 'but current is', now);
       return;
     }
+    // PROTECTED — fire-time empty guard prevents Alt+R refresh from pushing a cleared canvas outward (dialogue-wipe fix), confirmed working 2026-06-03. Do not modify without explicit ask.
+    // FIRE-TIME empty guard. The queue-time guard above checked branches when
+    // this push was scheduled, but serialization happens HERE, 80ms later.
+    // If the canvas was cleared in between (Alt+R / no-actor refresh clears
+    // branches AFTER pushHistory queues this), serializeAll() would emit empty
+    // and wipe the actor's real dialogue. Re-validate so refresh stays inward
+    // only and a cleared/empty canvas can never be pushed outward.
+    if (!branches.length) { console.warn('[Live push aborted] branches cleared before fire'); return; }
+    const _fireHasContent = branches.some(b => (b.npcText || '').trim() || (b.playerResponses || []).some(r => (r.text || '').trim() || (r.branchSelection || '').trim()));
+    if (!_fireHasContent && branches.length <= 1 && !_anyBranchHasMapData()) { console.warn('[Live push aborted] empty at fire'); return; }
     bridgePushRaw(_bridgeQueuedActor, serializeAll(branches));
   }, 80);
   setStatus('Live push queued…');
@@ -8227,6 +8666,47 @@ function _directBranchPush() {
 // Hook into history so any edit triggers a live push
 const _origPushHistory = pushHistory;
 pushHistory = function() { _origPushHistory.apply(this, arguments); bridgeLiveTrigger(); };
+
+// PROTECTED — server lifecycle heartbeat + no-project prompt, confirmed working 2026-06-03. Do not modify without explicit ask.
+// ── Server lifecycle: heartbeat so an orphaned bridge can self-close ────────
+// The server pairs this with its own UE-liveness ping. If the UE project has
+// been gone for 10+ minutes while this tab is still open, the server sets
+// `prompt` and we ask whether to keep working (resets the timer) or close the
+// server. If this tab is gone AND the project is gone, the server closes itself.
+let _lifecycleModalOpen = false;
+async function _lifecycleHeartbeat() {
+  if (!_bridgeOnline) return;
+  let r;
+  try { r = await bridgeFetch('/heartbeat', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); }
+  catch (e) { return; }
+  if (r && r.prompt && !_lifecycleModalOpen) _showNoProjectPrompt();
+}
+function _showNoProjectPrompt() {
+  if (_lifecycleModalOpen) return;
+  _lifecycleModalOpen = true;
+  const ov = document.createElement('div');
+  ov.id = 'lifecycle-modal';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.62);display:flex;align-items:center;justify-content:center;';
+  ov.innerHTML = `
+    <div style="max-width:460px;background:#1b1b22;border:1px solid #3a3a44;border-radius:10px;padding:24px;text-align:center;font:14px/1.6 system-ui,'Segoe UI',sans-serif;color:#ddd;box-shadow:0 10px 40px rgba(0,0,0,0.6)">
+      <h2 style="margin:0 0 10px;color:#fff;font-weight:600">No Unreal project associated</h2>
+      <p style="color:#9aa;margin:0 0 18px">This editor's Unreal project has been closed for over 10 minutes. Keep this editor and its bridge server running?</p>
+      <div style="display:flex;gap:10px;justify-content:center">
+        <button id="lc-keep" style="background:#e8a020;color:#161616;border:0;padding:9px 18px;border-radius:6px;cursor:pointer;font:600 13px system-ui">Keep working</button>
+        <button id="lc-close" style="background:#33333c;color:#ddd;border:1px solid #4a4a55;padding:9px 18px;border-radius:6px;cursor:pointer;font:600 13px system-ui">Close server</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#lc-keep').onclick = async () => {
+    try { await bridgeFetch('/keepalive', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); } catch (e) {}
+    ov.remove(); _lifecycleModalOpen = false;
+  };
+  ov.querySelector('#lc-close').onclick = async () => {
+    try { await bridgeFetch('/shutdown', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); } catch (e) {}
+    ov.innerHTML = '<div style="font:14px system-ui;color:#9aa;text-align:center;padding:40px">Bridge server closed. You can close this tab.</div>';
+  };
+}
+setInterval(_lifecycleHeartbeat, 15000);
 
 /* ============================== PY CONSOLE ============================== */
 function _savePyState() {
@@ -10139,6 +10619,53 @@ setInterval(() => { if (!document.hidden) bridgeFetch('/health').then(h => setBr
     } else {
       console.warn('[TEST:cat-persist] fail reason=order-mismatch natural=' + JSON.stringify(naturalOrder.slice(0,2)) + ' persisted=' + JSON.stringify(swapped.slice(0,2)) + ' applied=' + JSON.stringify(afterOrder.slice(0,2)));
     }
+  });
+})();
+
+// TEST HOOK (remove after task select-search passes) — verifies the generic
+// searchable <select>: opening a native select shows a popup with an
+// auto-focused search box, typing filters the option list, and clicking a
+// filtered row commits the value to the real <select> and fires 'change'.
+(function() {
+  if (!location.search.includes('test=select-search')) return;
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      try {
+        var sel = document.createElement('select');
+        ['Alpha','Bravo','Charlie','Delta','BravoMax'].forEach(function(t){
+          var o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o);
+        });
+        document.body.appendChild(sel);
+        var changed = false;
+        sel.addEventListener('change', function(){ changed = true; });
+
+        openSelectSearch(sel);
+        var pop = document.querySelector('.sel-search-pop');
+        if (!pop) { console.warn('[TEST:select-search] fail reason=no-popup'); return; }
+        var input = pop.querySelector('.ap-search input');
+        var focused = document.activeElement === input;
+        var allCount = pop.querySelectorAll('.sel-search-item').length;
+
+        // Type to filter: "bravo" should match "Bravo" + "BravoMax" (case-insensitive).
+        input.value = 'bravo';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        var filtered = pop.querySelectorAll('.sel-search-item');
+        var filterOk = filtered.length === 2;
+
+        // Click the first filtered row -> commits "Bravo".
+        filtered[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        var committed = (sel.value === 'Bravo');
+        var popGone = !document.querySelector('.sel-search-pop');
+
+        sel.remove();
+        var pass = focused && filterOk && committed && changed && popGone && allCount === 5;
+        console.warn('[TEST:select-search] ' + (pass ? 'pass' : 'fail')
+          + ' focused=' + focused + ' allCount=' + allCount + ' filtered=' + filtered.length
+          + ' committed=' + committed + ' changeFired=' + changed + ' popClosed=' + popGone);
+      } catch(e) {
+        console.warn('[TEST:select-search] fail reason=' + e.message);
+      }
+    }, 1500);
   });
 })();
 
